@@ -22,7 +22,7 @@ export const turfs: Turf[] = [
     description:
       "7s Size Synthetic turf with LED floodlights, perfect for 5v5 and 7v7. Clean changing rooms and ample parking.",
     images: [turf1],
-    pricePerHour: 1000,
+    pricePerHour: 800,
     operatingHours: { open: "06:00", close: "22:00" },
     amenities: ["Parking", "Changing Room", "Drinking Water", "Washrooms", "Swimming Pool"],
   },

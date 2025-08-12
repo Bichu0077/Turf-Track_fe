@@ -15,7 +15,7 @@ export default function AdminDashboard() {
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <div className="card-elevated p-4"><div className="text-sm text-muted-foreground">Total Bookings</div><div className="mt-2 text-2xl font-semibold">{JSON.parse(localStorage.getItem('bookings')||'[]').length}</div></div>
           <div className="card-elevated p-4"><div className="text-sm text-muted-foreground">Total Revenue</div><div className="mt-2 text-2xl font-semibold">₹{JSON.parse(localStorage.getItem('bookings')||'[]').reduce((s: number, b: any)=>s+b.totalAmount,0)}</div></div>
-          <div className="card-elevated p-4"><div className="text-sm text-muted-foreground">Active Turfs</div><div className="mt-2 text-2xl font-semibold">2</div></div>
+          <div className="card-elevated p-4"><div className="text-sm text-muted-foreground">Active Turfs</div><div className="mt-2 text-2xl font-semibold">3</div></div>
         </div>
       </section>
     </main>

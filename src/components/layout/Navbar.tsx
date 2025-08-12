@@ -14,7 +14,9 @@ export default function Navbar() {
     <header className="sticky top-0 z-40 w-full border-b bg-background/80 backdrop-blur">
       <nav className="container flex h-16 items-center justify-between">
         <Link to="/" className="flex items-center gap-2">
-          <span className="inline-block h-6 w-6 rounded-md bg-primary"></span>
+          <span className="inline-flex h-6 w-6 items-center justify-center rounded-md bg-primary">
+            <img src="favicon.ico" alt="" className="h-full w-full object-contain" />
+          </span>
           <span className="font-semibold">TurfTrack</span>
         </Link>
         <div className="hidden gap-6 md:flex">
