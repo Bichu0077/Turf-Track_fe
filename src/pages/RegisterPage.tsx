@@ -30,7 +30,7 @@ export default function RegisterPage() {
   return (
     <main className="container py-10">
       <Helmet>
-        <title>Register | TMS</title>
+        <title>Register</title>
         <meta name="description" content="Create your TMS account to book turfs." />
         <link rel="canonical" href="/register" />
       </Helmet>

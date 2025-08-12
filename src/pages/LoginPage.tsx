@@ -28,7 +28,7 @@ export default function LoginPage() {
   return (
     <main className="container py-10">
       <Helmet>
-        <title>Login | TMS</title>
+        <title>Login</title>
         <meta name="description" content="Login to manage your bookings." />
         <link rel="canonical" href="/login" />
       </Helmet>

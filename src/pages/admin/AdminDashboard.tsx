@@ -7,7 +7,7 @@ export default function AdminDashboard() {
       <AdminSidebar />
       <section className="container py-8">
         <Helmet>
-          <title>Admin Dashboard | TMS</title>
+          <title>Admin Dashboard</title>
           <meta name="description" content="Overview of turfs, bookings, and revenue." />
           <link rel="canonical" href="/admin" />
         </Helmet>

@@ -10,7 +10,7 @@ export default function BookingManagementPage() {
       <AdminSidebar />
       <section className="container py-8">
         <Helmet>
-          <title>Manage Bookings | TMS</title>
+          <title>Manage Bookings</title>
           <meta name="description" content="View and manage all user bookings." />
           <link rel="canonical" href="/admin/bookings" />
         </Helmet>

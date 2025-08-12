@@ -24,8 +24,8 @@ const Index = () => {
   return (
     <main>
       <Helmet>
-        <title>Book Premium Sports Turfs | TMS</title>
-        <meta name="description" content="Discover, compare, and book premium sports turf slots near you with TMS." />
+        <title>TurfTrack</title>
+        <meta name="description" content="Discover, compare, and book premium sports turf slots near you with TurfTrack." />
         <link rel="canonical" href="/" />
         <script type="application/ld+json">{JSON.stringify({
           '@context': 'https://schema.org',

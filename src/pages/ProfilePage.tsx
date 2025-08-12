@@ -24,7 +24,7 @@ export default function ProfilePage() {
   return (
     <main className="container py-10">
       <Helmet>
-        <title>My Bookings | TMS</title>
+        <title>My Bookings</title>
         <meta name="description" content="View and manage your TMS bookings, and download receipts." />
         <link rel="canonical" href="/profile" />
       </Helmet>

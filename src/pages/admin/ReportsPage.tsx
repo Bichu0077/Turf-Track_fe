@@ -9,7 +9,7 @@ export default function ReportsPage() {
       <AdminSidebar />
       <section className="container py-8">
         <Helmet>
-          <title>Reports | TMS</title>
+          <title>Reports</title>
           <meta name="description" content="Revenue and booking insights." />
           <link rel="canonical" href="/admin/reports" />
         </Helmet>

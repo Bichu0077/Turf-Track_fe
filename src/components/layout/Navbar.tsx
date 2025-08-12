@@ -15,7 +15,7 @@ export default function Navbar() {
       <nav className="container flex h-16 items-center justify-between">
         <Link to="/" className="flex items-center gap-2">
           <span className="inline-block h-6 w-6 rounded-md bg-primary"></span>
-          <span className="font-semibold">TMS</span>
+          <span className="font-semibold">TurfTrack</span>
         </Link>
         <div className="hidden gap-6 md:flex">
           {navLinks.map((l) => (

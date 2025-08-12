@@ -9,7 +9,7 @@ export default function TurfManagementPage() {
       <AdminSidebar />
       <section className="container py-8">
         <Helmet>
-          <title>Manage Turfs | TMS</title>
+          <title>Manage Turfs</title>
           <meta name="description" content="Create, edit and delete turfs." />
           <link rel="canonical" href="/admin/turfs" />
         </Helmet>

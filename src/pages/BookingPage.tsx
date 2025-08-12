@@ -63,7 +63,7 @@ export default function BookingPage() {
   return (
     <main className="container py-8">
       <Helmet>
-        <title>Confirm Booking | TMS</title>
+        <title>Confirm Booking</title>
         <meta name="description" content="Confirm booking details and complete payment." />
         <link rel="canonical" href="/booking" />
       </Helmet>

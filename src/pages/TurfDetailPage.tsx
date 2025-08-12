@@ -25,7 +25,7 @@ export default function TurfDetailPage() {
   return (
     <main className="container py-8">
       <Helmet>
-        <title>{turf.name} | TMS</title>
+        <title>{turf.name}</title>
         <meta name="description" content={`Book ${turf.name} located at ${turf.location}. Available hourly slots and amenities.`} />
         <link rel="canonical" href={`/turfs/${turf.id}`} />
         <script type="application/ld+json">{JSON.stringify({
