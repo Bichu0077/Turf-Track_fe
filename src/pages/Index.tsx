@@ -1,5 +1,4 @@
 import { Helmet } from "react-helmet-async";
-import heroImage from "@/assets/hero-turf.jpg";
 import { Input } from "@/components/ui/input";
 import { Slider } from "@/components/ui/slider";
 import { Button } from "@/components/ui/button";
@@ -7,6 +6,7 @@ import TurfCard from "@/components/turf/TurfCard";
 import { useEffect, useMemo, useState } from "react";
 import { apiRequest } from "@/lib/auth";
 import type { Turf } from "@/types";
+import GreenScreenBackground from "@/components/visual/GreenScreenBackground";
 
 const Index = () => {
   const [query, setQuery] = useState("");
@@ -48,7 +48,7 @@ const Index = () => {
   }, [turfs, query, price]);
 
   return (
-    <main>
+    <main className="relative overflow-hidden">
       <Helmet>
         <title>TurfTrack</title>
         <meta name="description" content="Discover, compare, and book premium sports turf slots near you with TurfTrack." />
@@ -60,12 +60,17 @@ const Index = () => {
         })}</script>
       </Helmet>
 
+      {/* Background video (high quality) */}
+     
+      <div className="absolute inset-0 -z-10 pixel-grid mix-blend-soft-light opacity-30 pointer-events-none" />
+      <div className="absolute inset-0 -z-10 scanlines pointer-events-none" />
+
       {/* Hero */}
       <section className="relative">
         <div className="hero-glow" aria-hidden />
-        <div className="container grid gap-8 py-12 md:grid-cols-2 md:py-16">
+        <div className="container grid gap-8 py-16 md:grid-cols-2 md:py-24">
           <div className="flex flex-col justify-center gap-6">
-            <h1 className="text-4xl font-bold leading-tight md:text-5xl">
+            <h1 className="text-4xl font-extrabold leading-tight md:text-6xl pixel-shadow">
               Book premium sports turfs in minutes
             </h1>
             <p className="text-muted-foreground text-lg">
@@ -76,8 +81,19 @@ const Index = () => {
               <Button variant="premium">How it works</Button>
             </div>
           </div>
-          <div className="relative">
-            <img src={heroImage} alt="Premium football turf at golden hour" className="w-full rounded-xl shadow-[var(--shadow-card)]" />
+          <div className="relative w-[300px] h-[600px] md:w-[800px] md:h-[460px] rounded-xl overflow-hidden ">
+            {/* Inline chroma-key video (high quality) */}
+            <GreenScreenBackground
+              className="absolute border-0 inset-2 md:inset-4 rounded-lg overflow-hidden"
+              highQuality
+              pixelSize={1}
+              fps={30}
+              disableOnMobile={false}
+              sources={["/videos/ronaldhino_clip.mp4"]}
+              edgeSmooth
+              soften
+            />
+            <div className="absolute inset-0 pixel-grid opacity-20 mix-blend-soft-light" />
           </div>
         </div>
       </section>
