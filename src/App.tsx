@@ -16,6 +16,8 @@ import AdminDashboard from "./pages/admin/AdminDashboard";
 import TurfManagementPage from "./pages/admin/TurfManagementPage";
 import BookingManagementPage from "./pages/admin/BookingManagementPage";
 import ReportsPage from "./pages/admin/ReportsPage";
+import { AuthProvider } from "@/hooks/useAuth";
+import ProtectedRoute from "@/components/ProtectedRoute";
 
 const queryClient = new QueryClient();
 
@@ -31,24 +33,31 @@ const App = () => (
         <Toaster />
         <Sonner />
         <BrowserRouter>
-          <Navbar />
-          <Routes>
-            <Route path="/" element={<Index />} />
-            <Route path="/turfs/:id" element={<TurfDetailPage />} />
-            <Route path="/booking" element={<BookingPage />} />
-            <Route path="/login" element={<LoginPage />} />
-            <Route path="/register" element={<RegisterPage />} />
-            <Route path="/profile" element={<ProfilePage />} />
+          <AuthProvider>
+            <Navbar />
+            <Routes>
+              <Route path="/" element={<Index />} />
+              <Route path="/turfs/:id" element={<TurfDetailPage />} />
+              <Route path="/booking" element={<BookingPage />} />
+              <Route path="/login" element={<LoginPage />} />
+              <Route path="/register" element={<RegisterPage />} />
 
-            {/* Admin */}
-            <Route path="/admin" element={<AdminDashboard />} />
-            <Route path="/admin/turfs" element={<TurfManagementPage />} />
-            <Route path="/admin/bookings" element={<BookingManagementPage />} />
-            <Route path="/admin/reports" element={<ReportsPage />} />
+              <Route element={<ProtectedRoute roles={["user", "admin"]} />}>
+                <Route path="/profile" element={<ProfilePage />} />
+              </Route>
 
-            {/* Catch-all */}
-            <Route path="*" element={<NotFound />} />
-          </Routes>
+              {/* Admin */}
+              <Route element={<ProtectedRoute roles={["admin"]} />}>
+                <Route path="/admin" element={<AdminDashboard />} />
+                <Route path="/admin/turfs" element={<TurfManagementPage />} />
+                <Route path="/admin/bookings" element={<BookingManagementPage />} />
+                <Route path="/admin/reports" element={<ReportsPage />} />
+              </Route>
+
+              {/* Catch-all */}
+              <Route path="*" element={<NotFound />} />
+            </Routes>
+          </AuthProvider>
         </BrowserRouter>
       </TooltipProvider>
     </HelmetProvider>

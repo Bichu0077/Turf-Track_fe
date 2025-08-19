@@ -6,6 +6,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/hooks/useAuth";
 
 const schema = z.object({
   email: z.string().email(),
@@ -17,12 +18,18 @@ type FormData = z.infer<typeof schema>;
 export default function LoginPage() {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { login } = useAuth();
   const { register, handleSubmit, formState: { errors } } = useForm<FormData>({ resolver: zodResolver(schema) });
 
   function onSubmit(values: FormData) {
-    localStorage.setItem('user', JSON.stringify({ email: values.email }));
-    toast({ title: 'Welcome back', description: 'Logged in successfully' });
-    navigate('/');
+    login(values.email, values.password)
+      .then(() => {
+        toast({ title: 'Welcome back', description: 'Logged in successfully' });
+        navigate('/');
+      })
+      .catch((e) => {
+        toast({ title: 'Login failed', description: 'Invalid credentials', variant: 'destructive' });
+      });
   }
 
   return (

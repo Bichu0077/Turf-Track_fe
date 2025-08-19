@@ -4,12 +4,38 @@ import { Input } from "@/components/ui/input";
 import { Slider } from "@/components/ui/slider";
 import { Button } from "@/components/ui/button";
 import TurfCard from "@/components/turf/TurfCard";
-import { turfs } from "@/data/mockTurfs";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { apiRequest } from "@/lib/auth";
+import type { Turf } from "@/types";
 
 const Index = () => {
   const [query, setQuery] = useState("");
   const [price, setPrice] = useState<number[]>([600, 2000]);
+  const [turfs, setTurfs] = useState<Turf[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const data = await apiRequest<{ turfs: any[] }>("/api/turfs/public");
+        const mapped: Turf[] = (data.turfs || []).map((t) => ({
+          id: t._id ?? t.id,
+          name: t.name,
+          location: t.location,
+          description: t.description ?? "",
+          images: Array.isArray(t.images) && t.images.length > 0 ? t.images : ["/placeholder.svg"],
+          pricePerHour: Number(t.pricePerHour ?? 0),
+          operatingHours: { open: t.operatingHours?.open ?? "06:00", close: t.operatingHours?.close ?? "22:00" },
+          amenities: Array.isArray(t.amenities) ? t.amenities : [],
+        }));
+        setTurfs(mapped);
+      } catch {
+        setTurfs([]);
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, []);
 
   const filtered = useMemo(() => {
     return turfs.filter((t) => {
@@ -19,7 +45,7 @@ const Index = () => {
       const matchP = t.pricePerHour >= price[0] && t.pricePerHour <= price[1];
       return matchQ && matchP;
     });
-  }, [query, price]);
+  }, [turfs, query, price]);
 
   return (
     <main>
@@ -30,7 +56,7 @@ const Index = () => {
         <script type="application/ld+json">{JSON.stringify({
           '@context': 'https://schema.org',
           '@type': 'ItemList',
-          itemListElement: turfs.map((t, i) => ({ '@type': 'ListItem', position: i + 1, name: t.name, url: `/turfs/${t.id}` }))
+          itemListElement: filtered.map((t, i) => ({ '@type': 'ListItem', position: i + 1, name: t.name, url: `/turfs/${t.id}` }))
         })}</script>
       </Helmet>
 
@@ -79,7 +105,11 @@ const Index = () => {
       {/* List */}
       <section className="container py-10">
         <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          {filtered.map((t) => (
+          {loading && <div className="text-sm text-muted-foreground">Loading turfs...</div>}
+          {!loading && filtered.length === 0 && (
+            <div className="text-sm text-muted-foreground">No turfs found.</div>
+          )}
+          {!loading && filtered.map((t) => (
             <TurfCard key={t.id} turf={t} />
           ))}
         </div>

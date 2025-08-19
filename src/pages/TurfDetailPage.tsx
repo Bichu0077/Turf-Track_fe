@@ -1,18 +1,53 @@
 import { Helmet } from "react-helmet-async";
 import { useParams, useNavigate } from "react-router-dom";
-import { turfs } from "@/data/mockTurfs";
 import TimeSlotPicker from "@/components/turf/TimeSlotPicker";
 import { Calendar } from "@/components/ui/calendar";
 import { Button } from "@/components/ui/button";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { format } from "date-fns";
+import { apiRequest } from "@/lib/auth";
+import type { Turf } from "@/types";
 
 export default function TurfDetailPage() {
   const { id } = useParams();
-  const turf = turfs.find((t) => t.id === id);
   const navigate = useNavigate();
+  const [turf, setTurf] = useState<Turf | null>(null);
+  const [loading, setLoading] = useState(true);
   const [date, setDate] = useState<Date | undefined>(new Date());
   const [time, setTime] = useState<string | null>(null);
+
+  useEffect(() => {
+    (async () => {
+      if (!id) return;
+      try {
+        const data = await apiRequest<{ turf: any }>(`/api/turfs/${id}`);
+        const t = data.turf;
+        const mapped: Turf = {
+          id: t._id ?? t.id,
+          name: t.name,
+          location: t.location,
+          description: t.description ?? "",
+          images: Array.isArray(t.images) && t.images.length > 0 ? t.images : ["/placeholder.svg"],
+          pricePerHour: Number(t.pricePerHour ?? 0),
+          operatingHours: { open: t.operatingHours?.open ?? "06:00", close: t.operatingHours?.close ?? "22:00" },
+          amenities: Array.isArray(t.amenities) ? t.amenities : [],
+        };
+        setTurf(mapped);
+      } catch {
+        setTurf(null);
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [id]);
+
+  if (loading) {
+    return (
+      <main className="container py-16">
+        <h1 className="text-2xl font-semibold">Loading turf...</h1>
+      </main>
+    );
+  }
 
   if (!turf) {
     return (
