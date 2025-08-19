@@ -125,4 +125,37 @@
     filter: blur(40px);
     pointer-events: none;
   }
+
+  /* Pixelated theme utilities */
+  .pixelated { image-rendering: pixelated; image-rendering: crisp-edges; }
+  .pixel-shadow {
+    text-shadow: 0 0 0 #000, 2px 2px 0 hsl(var(--accent) / 0.6), -2px -2px 0 hsl(var(--primary) / 0.6);
+  }
+  .pixel-grid {
+    background-image:
+      linear-gradient(to right, rgba(255,255,255,0.05) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(255,255,255,0.05) 1px, transparent 1px);
+    background-size: 16px 16px;
+  }
+  .scanlines {
+    background: repeating-linear-gradient(
+      to bottom,
+      rgba(0, 0, 0, 0.08),
+      rgba(0, 0, 0, 0.08) 1px,
+      transparent 2px,
+      transparent 4px
+    );
+  }
+  /* Edge smoothing helper for keyed sprites */
+  .pixel-edge-smooth {
+    filter: drop-shadow(0 0 8px rgba(0, 0, 0, 0.25)) drop-shadow(0 2px 4px rgba(0,0,0,0.2));
+  }
+  /* Softening pass for subtle artifact hiding */
+  .pixel-soften {
+    filter: blur(0.6px) contrast(1.02) saturate(1.05);
+  }
+  .pixel-smooth-combined {
+    filter: blur(0.6px) contrast(1.02) saturate(1.05)
+      drop-shadow(0 0 8px rgba(0, 0, 0, 0.25)) drop-shadow(0 2px 4px rgba(0,0,0,0.2));
+  }
 }
