@@ -12,6 +12,7 @@ import BookingPage from "./pages/BookingPage";
 import LoginPage from "./pages/LoginPage";
 import RegisterPage from "./pages/RegisterPage";
 import ProfilePage from "./pages/ProfilePage";
+import UserBookingsPage from "./pages/UserBookingsPage";
 import AdminDashboard from "./pages/admin/AdminDashboard";
 import TurfManagementPage from "./pages/admin/TurfManagementPage";
 import BookingManagementPage from "./pages/admin/BookingManagementPage";
@@ -44,6 +45,7 @@ const App = () => (
 
               <Route element={<ProtectedRoute roles={["user", "admin"]} />}>
                 <Route path="/profile" element={<ProfilePage />} />
+                <Route path="/bookings" element={<UserBookingsPage />} />
               </Route>
 
               {/* Admin */}

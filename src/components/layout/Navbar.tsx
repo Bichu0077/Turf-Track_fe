@@ -2,10 +2,11 @@ import { Link, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 
 const navLinks = [
   { to: "/", label: "Home" },
-  { to: "/profile", label: "My Bookings" },
+  { to: "/bookings", label: "My Bookings" },
   { to: "/admin", label: "Admin" },
 ];
 
@@ -45,7 +46,12 @@ export default function Navbar() {
             </>
           ) : (
             <>
-              <span className="text-sm text-muted-foreground hidden sm:inline">{user?.name}</span>
+              <Link to="/profile" className="flex items-center">
+                <Avatar>
+                  <AvatarImage src={localStorage.getItem("profile_avatar") || undefined} alt={user?.name} />
+                  <AvatarFallback>{user?.name?.[0]}</AvatarFallback>
+                </Avatar>
+              </Link>
               <Button variant="ghost" onClick={logout}>Log out</Button>
             </>
           )}
