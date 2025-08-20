@@ -3,7 +3,7 @@ import { Input } from "@/components/ui/input";
 import { Slider } from "@/components/ui/slider";
 import { Button } from "@/components/ui/button";
 import TurfCard from "@/components/turf/TurfCard";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import { apiRequest } from "@/lib/auth";
 import type { Turf } from "@/types";
 import GreenScreenBackground from "@/components/visual/GreenScreenBackground";
@@ -13,6 +13,7 @@ const Index = () => {
   const [price, setPrice] = useState<number[]>([600, 2000]);
   const [turfs, setTurfs] = useState<Turf[]>([]);
   const [loading, setLoading] = useState(true);
+  const turfsRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     (async () => {
@@ -77,7 +78,9 @@ const Index = () => {
               Real-time availability, transparent pricing, and a smooth checkout experience.
             </p>
             <div className="flex flex-wrap gap-3">
-              <Button variant="hero">Explore turfs</Button>
+              <Button variant="hero" onClick={() => turfsRef.current?.scrollIntoView({ behavior: 'smooth' })}>
+                Explore turfs
+              </Button>
               <Button variant="premium">How it works</Button>
             </div>
           </div>
@@ -119,7 +122,7 @@ const Index = () => {
       </section>
 
       {/* List */}
-      <section className="container py-10">
+      <section className="container py-10" ref={turfsRef}>
         <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
           {loading && <div className="text-sm text-muted-foreground">Loading turfs...</div>}
           {!loading && filtered.length === 0 && (

@@ -1,55 +1,617 @@
 import { Helmet } from "react-helmet-async";
 import { Button } from "@/components/ui/button";
-import { formatCurrencyINR } from "@/lib/format";
-import { jsPDF } from "jspdf";
-import type { Booking } from "@/types";
-
-function downloadReceipt(booking: Booking) {
-  const doc = new jsPDF();
-  doc.setFontSize(16);
-  doc.text("TMS Booking Receipt", 20, 20);
-  doc.setFontSize(12);
-  doc.text(`Booking ID: ${booking.id}`, 20, 32);
-  doc.text(`Turf: ${booking.turfName}`, 20, 40);
-  doc.text(`Date: ${booking.bookingDate}`, 20, 48);
-  doc.text(`Time: ${booking.startTime} - ${booking.endTime}`, 20, 56);
-  doc.text(`Amount: ${formatCurrencyINR(booking.totalAmount)}`, 20, 64);
-  doc.text(`Status: ${booking.bookingStatus} • Payment: ${booking.paymentStatus}`, 20, 72);
-  doc.save(`TMS-Receipt-${booking.id}.pdf`);
-}
+import { useAuth } from "@/hooks/useAuth";
+import { useState, useRef } from "react";
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { 
+  User, 
+  Mail, 
+  Camera, 
+  Edit2, 
+  Save, 
+  X, 
+  Trash2, 
+  Shield,
+  CheckCircle,
+  AlertCircle,
+  Calendar,
+  Settings,
+  Lock,
+  Bell,
+  Activity,
+  MapPin,
+  Phone,
+  Building
+} from "lucide-react";
 
 export default function ProfilePage() {
-  const bookings: Booking[] = JSON.parse(localStorage.getItem('bookings') || '[]');
+  const { user, token, logout, refreshMe } = useAuth();
+  const [editing, setEditing] = useState(false);
+  const [activeTab, setActiveTab] = useState('profile');
+  const [form, setForm] = useState({
+    name: user?.name || "",
+    email: user?.email || "",
+    phone: user?.phone || "",
+    location: user?.location || "",
+    company: user?.company || "",
+    avatar: (typeof window !== 'undefined' ? sessionStorage.getItem("profile_avatar") : "") || ""
+  });
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+
+  if (!user) return null;
+
+  const clearMessages = () => {
+    setError(null);
+    setSuccess(null);
+  };
+
+  async function handleEdit() {
+    setLoading(true);
+    clearMessages();
+    
+    try {
+      const response = await fetch("/api/auth/me", {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ 
+          name: form.name.trim(), 
+          email: form.email.trim(),
+          phone: form.phone.trim(),
+          location: form.location.trim(),
+          company: form.company.trim()
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to update profile: ${response.statusText}`);
+      }
+
+      if (typeof window !== 'undefined') {
+        sessionStorage.setItem("profile_avatar", form.avatar);
+      }
+      
+      await refreshMe();
+      setEditing(false);
+      setSuccess("Profile updated successfully!");
+      
+      setTimeout(() => setSuccess(null), 3000);
+    } catch (e: any) {
+      setError(e.message || "Failed to update profile");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleDelete() {
+    setLoading(true);
+    clearMessages();
+    
+    try {
+      const response = await fetch("/api/auth/me", {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to delete account: ${response.statusText}`);
+      }
+
+      logout();
+    } catch (e: any) {
+      setError(e.message || "Failed to delete account");
+    } finally {
+      setLoading(false);
+      setShowDeleteConfirm(false);
+    }
+  }
+
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 5 * 1024 * 1024) {
+      setError("Image size must be less than 5MB");
+      return;
+    }
+
+    if (!file.type.startsWith('image/')) {
+      setError("Please select a valid image file");
+      return;
+    }
+
+    clearMessages();
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      setForm(f => ({ ...f, avatar: reader.result as string }));
+      setSuccess("Profile image updated successfully!");
+    };
+    reader.onerror = () => {
+      setError("Failed to read image file");
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleCancel = () => {
+    setForm({
+      name: user?.name || "",
+      email: user?.email || "",
+      phone: user?.phone || "",
+      location: user?.location || "",
+      company: user?.company || "",
+      avatar: (typeof window !== 'undefined' ? sessionStorage.getItem("profile_avatar") : "") || ""
+    });
+    setEditing(false);
+    clearMessages();
+  };
+
+  const getRoleConfig = (role: string) => {
+    switch (role?.toLowerCase()) {
+      case 'admin':
+        return { color: 'bg-red-50 text-red-700 border-red-200', icon: Shield };
+      case 'moderator':
+        return { color: 'bg-blue-50 text-blue-700 border-blue-200', icon: Shield };
+      case 'premium':
+        return { color: 'bg-purple-50 text-purple-700 border-purple-200', icon: Shield };
+      default:
+        return { color: 'bg-green-50 text-green-700 border-green-200', icon: User };
+    }
+  };
+
+  const roleConfig = getRoleConfig(user.role);
+  const RoleIcon = roleConfig.icon;
 
   return (
-    <main className="container py-10">
+    <div className="min-h-screen bg-gradient-to-br from-green-50 via-white to-green-50">
       <Helmet>
-        <title>My Bookings</title>
-        <meta name="description" content="View and manage your TMS bookings, and download receipts." />
-        <link rel="canonical" href="/profile" />
+        <title>Profile Settings - TurfTrack</title>
+        <meta name="description" content="Manage your TurfTrack profile and account settings." />
       </Helmet>
 
-      <h1 className="mb-6 text-2xl font-semibold">My bookings</h1>
-      {bookings.length === 0 ? (
-        <p className="text-muted-foreground">No bookings yet. Explore turfs to get started!</p>
-      ) : (
-        <div className="grid gap-4">
-          {bookings.map((b) => (
-            <div key={b.id} className="card-elevated p-4">
-              <div className="flex flex-wrap items-center justify-between gap-4">
-                <div>
-                  <div className="font-medium">{b.turfName}</div>
-                  <div className="text-sm text-muted-foreground">{b.bookingDate} • {b.startTime}-{b.endTime}</div>
-                </div>
-                <div className="text-sm font-medium">{formatCurrencyINR(b.totalAmount)}</div>
-                <div className="flex gap-2">
-                  <Button variant="secondary" onClick={() => downloadReceipt(b)}>Download PDF</Button>
-                </div>
+      {/* Header */}
+      <div className="bg-white border-b border-green-100 shadow-sm">
+        <div className="container mx-auto px-6 py-8">
+          <div className="flex items-center space-x-6">
+            <div className="relative">
+              <Avatar className="h-20 w-20 border-4 border-green-100 shadow-lg">
+                <AvatarImage src={form.avatar || undefined} alt={user.name} className="object-cover" />
+                <AvatarFallback className="text-2xl font-bold bg-gradient-to-br from-green-100 to-green-200 text-green-700">
+                  {user.name[0]?.toUpperCase()}
+                </AvatarFallback>
+              </Avatar>
+              {editing && (
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  className="absolute -bottom-1 -right-1 bg-green-600 hover:bg-green-700 text-white rounded-full p-2 shadow-lg transition-colors"
+                >
+                  <Camera className="h-4 w-4" />
+                </button>
+              )}
+            </div>
+            <div className="flex-1">
+              <h1 className="text-3xl font-bold text-gray-900">{user.name}</h1>
+              <p className="text-gray-600 mt-1">{user.email}</p>
+              <div className="flex items-center space-x-3 mt-3">
+                <Badge className={`${roleConfig.color} px-3 py-1 text-sm font-medium border`}>
+                  <RoleIcon className="h-3 w-3 mr-1" />
+                  {user.role}
+                </Badge>
+                <Badge className="bg-green-50 text-green-700 border-green-200 px-3 py-1 text-sm">
+                  <Activity className="h-3 w-3 mr-1" />
+                  Active
+                </Badge>
               </div>
             </div>
-          ))}
+          </div>
         </div>
-      )}
-    </main>
+      </div>
+
+      {/* Navigation Tabs */}
+      <div className="bg-white border-b border-gray-100">
+        <div className="container mx-auto px-6">
+          <nav className="flex space-x-8">
+            {[
+              { id: 'profile', label: 'Profile Information', icon: User },
+              { id: 'security', label: 'Security', icon: Lock },
+              { id: 'notifications', label: 'Notifications', icon: Bell }
+            ].map(tab => {
+              const Icon = tab.icon;
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`flex items-center space-x-2 py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
+                    activeTab === tab.id
+                      ? 'border-green-500 text-green-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  }`}
+                >
+                  <Icon className="h-4 w-4" />
+                  <span>{tab.label}</span>
+                </button>
+              );
+            })}
+          </nav>
+        </div>
+      </div>
+
+      <main className="container mx-auto px-6 py-8 max-w-6xl">
+        {/* Messages */}
+        {error && (
+          <Alert className="mb-6 border-red-200 bg-red-50">
+            <AlertCircle className="h-4 w-4 text-red-600" />
+            <AlertDescription className="text-red-700">{error}</AlertDescription>
+          </Alert>
+        )}
+
+        {success && (
+          <Alert className="mb-6 border-green-200 bg-green-50">
+            <CheckCircle className="h-4 w-4 text-green-600" />
+            <AlertDescription className="text-green-700">{success}</AlertDescription>
+          </Alert>
+        )}
+
+        <div className="grid gap-8 lg:grid-cols-3">
+          <div className="lg:col-span-2">
+            {activeTab === 'profile' && (
+              <Card className="shadow-lg border-0 bg-white">
+                <CardHeader className="border-b border-gray-100">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h2 className="text-2xl font-bold text-gray-900">Profile Information</h2>
+                      <p className="text-gray-600 mt-1">Update your account details and personal information.</p>
+                    </div>
+                    {!editing && (
+                      <Button 
+                        onClick={() => setEditing(true)}
+                        className="bg-green-600 hover:bg-green-700 text-white px-6"
+                      >
+                        <Edit2 className="h-4 w-4 mr-2" />
+                        Edit Profile
+                      </Button>
+                    )}
+                  </div>
+                </CardHeader>
+                <CardContent className="p-8">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    ref={fileInputRef}
+                    className="hidden"
+                    onChange={handleImageUpload}
+                  />
+
+                  {editing ? (
+                    <div className="space-y-6">
+                      <div className="grid gap-6 md:grid-cols-2">
+                        <div className="space-y-2">
+                          <label className="flex items-center text-sm font-medium text-gray-700">
+                            <User className="h-4 w-4 mr-2 text-green-600" />
+                            Full Name
+                          </label>
+                          <input
+                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all"
+                            type="text"
+                            value={form.name}
+                            onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+                            placeholder="Enter your full name"
+                            required
+                          />
+                        </div>
+
+                        <div className="space-y-2">
+                          <label className="flex items-center text-sm font-medium text-gray-700">
+                            <Mail className="h-4 w-4 mr-2 text-green-600" />
+                            Email Address
+                          </label>
+                          <input
+                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all"
+                            type="email"
+                            value={form.email}
+                            onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
+                            placeholder="Enter your email"
+                            required
+                          />
+                        </div>
+
+                        <div className="space-y-2">
+                          <label className="flex items-center text-sm font-medium text-gray-700">
+                            <Phone className="h-4 w-4 mr-2 text-green-600" />
+                            Phone Number
+                          </label>
+                          <input
+                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all"
+                            type="tel"
+                            value={form.phone}
+                            onChange={e => setForm(f => ({ ...f, phone: e.target.value }))}
+                            placeholder="Enter your phone number"
+                          />
+                        </div>
+
+                        <div className="space-y-2">
+                          <label className="flex items-center text-sm font-medium text-gray-700">
+                            <MapPin className="h-4 w-4 mr-2 text-green-600" />
+                            Location
+                          </label>
+                          <input
+                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all"
+                            type="text"
+                            value={form.location}
+                            onChange={e => setForm(f => ({ ...f, location: e.target.value }))}
+                            placeholder="Enter your location"
+                          />
+                        </div>
+
+                        <div className="space-y-2 md:col-span-2">
+                          <label className="flex items-center text-sm font-medium text-gray-700">
+                            <Building className="h-4 w-4 mr-2 text-green-600" />
+                            Company/Organization
+                          </label>
+                          <input
+                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all"
+                            type="text"
+                            value={form.company}
+                            onChange={e => setForm(f => ({ ...f, company: e.target.value }))}
+                            placeholder="Enter your company or organization"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="flex gap-4 pt-6 border-t border-gray-100">
+                        <Button 
+                          onClick={handleEdit}
+                          disabled={loading || !form.name.trim() || !form.email.trim()}
+                          className="bg-green-600 hover:bg-green-700 text-white px-8 py-2"
+                        >
+                          {loading ? (
+                            <div className="h-4 w-4 mr-2 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                          ) : (
+                            <Save className="h-4 w-4 mr-2" />
+                          )}
+                          {loading ? 'Saving...' : 'Save Changes'}
+                        </Button>
+                        <Button 
+                          variant="outline" 
+                          onClick={handleCancel}
+                          disabled={loading}
+                          className="px-8 py-2"
+                        >
+                          <X className="h-4 w-4 mr-2" />
+                          Cancel
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-6">
+                      <div className="grid gap-6 md:grid-cols-2">
+                        <div className="space-y-3">
+                          <div className="flex items-center text-sm font-medium text-gray-500">
+                            <User className="h-4 w-4 mr-2" />
+                            Full Name
+                          </div>
+                          <p className="text-lg text-gray-900 font-medium">{user.name}</p>
+                        </div>
+
+                        <div className="space-y-3">
+                          <div className="flex items-center text-sm font-medium text-gray-500">
+                            <Mail className="h-4 w-4 mr-2" />
+                            Email Address
+                          </div>
+                          <p className="text-lg text-gray-900 font-medium">{user.email}</p>
+                        </div>
+
+                        <div className="space-y-3">
+                          <div className="flex items-center text-sm font-medium text-gray-500">
+                            <Phone className="h-4 w-4 mr-2" />
+                            Phone Number
+                          </div>
+                          <p className="text-lg text-gray-900 font-medium">{form.phone || 'Not provided'}</p>
+                        </div>
+
+                        <div className="space-y-3">
+                          <div className="flex items-center text-sm font-medium text-gray-500">
+                            <MapPin className="h-4 w-4 mr-2" />
+                            Location
+                          </div>
+                          <p className="text-lg text-gray-900 font-medium">{form.location || 'Not provided'}</p>
+                        </div>
+
+                        <div className="space-y-3 md:col-span-2">
+                          <div className="flex items-center text-sm font-medium text-gray-500">
+                            <Building className="h-4 w-4 mr-2" />
+                            Company/Organization
+                          </div>
+                          <p className="text-lg text-gray-900 font-medium">{form.company || 'Not provided'}</p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+
+            {activeTab === 'security' && (
+              <Card className="shadow-lg border-0 bg-white">
+                <CardHeader className="border-b border-gray-100">
+                  <h2 className="text-2xl font-bold text-gray-900">Security Settings</h2>
+                  <p className="text-gray-600 mt-1">Manage your account security and privacy settings.</p>
+                </CardHeader>
+                <CardContent className="p-8">
+                  <div className="space-y-8">
+                    <div className="flex items-center justify-between p-6 bg-gray-50 rounded-lg">
+                      <div>
+                        <h3 className="text-lg font-semibold text-gray-900">Password</h3>
+                        <p className="text-gray-600 mt-1">Last updated 30 days ago</p>
+                      </div>
+                      <Button variant="outline" className="border-green-200 text-green-700 hover:bg-green-50">
+                        Change Password
+                      </Button>
+                    </div>
+
+                    <div className="flex items-center justify-between p-6 bg-gray-50 rounded-lg">
+                      <div>
+                        <h3 className="text-lg font-semibold text-gray-900">Two-Factor Authentication</h3>
+                        <p className="text-gray-600 mt-1">Add an extra layer of security to your account</p>
+                      </div>
+                      <Button variant="outline" className="border-green-200 text-green-700 hover:bg-green-50">
+                        Enable 2FA
+                      </Button>
+                    </div>
+
+                    <div className="border-t border-red-100 pt-8">
+                      <div className="bg-red-50 border border-red-200 rounded-lg p-6">
+                        <h3 className="text-lg font-semibold text-red-900 mb-2">Delete Account</h3>
+                        <p className="text-red-700 mb-4">
+                          Permanently delete your account and all associated data. This action cannot be undone.
+                        </p>
+                        <Button 
+                          onClick={() => setShowDeleteConfirm(true)}
+                          className="bg-red-600 hover:bg-red-700 text-white"
+                        >
+                          <Trash2 className="h-4 w-4 mr-2" />
+                          Delete Account
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {activeTab === 'notifications' && (
+              <Card className="shadow-lg border-0 bg-white">
+                <CardHeader className="border-b border-gray-100">
+                  <h2 className="text-2xl font-bold text-gray-900">Notification Preferences</h2>
+                  <p className="text-gray-600 mt-1">Choose how you want to be notified about updates and activities.</p>
+                </CardHeader>
+                <CardContent className="p-8">
+                  <div className="space-y-6">
+                    {[
+                      { title: 'Email Notifications', desc: 'Receive email updates about your account activity' },
+                      { title: 'SMS Notifications', desc: 'Get text message alerts for important updates' },
+                      { title: 'Push Notifications', desc: 'Browser notifications for real-time updates' },
+                      { title: 'Marketing Emails', desc: 'Receive promotional emails and product updates' }
+                    ].map((item, index) => (
+                      <div key={index} className="flex items-center justify-between p-4 border border-gray-200 rounded-lg">
+                        <div>
+                          <h3 className="font-medium text-gray-900">{item.title}</h3>
+                          <p className="text-gray-600 text-sm mt-1">{item.desc}</p>
+                        </div>
+                        <label className="relative inline-flex items-center cursor-pointer">
+                          <input type="checkbox" className="sr-only peer" defaultChecked={index < 2} />
+                          <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-green-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-600"></div>
+                        </label>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+          </div>
+
+          {/* Sidebar */}
+          <div className="space-y-6">
+            <Card className="shadow-lg border-0 bg-white">
+              <CardHeader>
+                <h3 className="text-lg font-semibold text-gray-900">Account Summary</h3>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex items-center justify-between py-3 border-b border-gray-100">
+                  <span className="text-gray-600">Member Since</span>
+                  <span className="font-medium text-gray-900">{new Date().toLocaleDateString()}</span>
+                </div>
+                <div className="flex items-center justify-between py-3 border-b border-gray-100">
+                  <span className="text-gray-600">Account Type</span>
+                  <Badge className={roleConfig.color}>{user.role}</Badge>
+                </div>
+                <div className="flex items-center justify-between py-3 border-b border-gray-100">
+                  <span className="text-gray-600">Status</span>
+                  <Badge className="bg-green-50 text-green-700 border-green-200">Active</Badge>
+                </div>
+                <div className="flex items-center justify-between py-3">
+                  <span className="text-gray-600">Last Login</span>
+                  <span className="font-medium text-gray-900">{new Date().toLocaleDateString()}</span>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="shadow-lg border-0 bg-white">
+              <CardHeader>
+                <h3 className="text-lg font-semibold text-gray-900">Quick Actions</h3>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <Button variant="outline" className="w-full justify-start border-green-200 text-green-700 hover:bg-green-50">
+                  <Settings className="h-4 w-4 mr-2" />
+                  Account Settings
+                </Button>
+                <Button variant="outline" className="w-full justify-start">
+                  <Calendar className="h-4 w-4 mr-2" />
+                  View Activity
+                </Button>
+                <Button variant="outline" className="w-full justify-start">
+                  <Bell className="h-4 w-4 mr-2" />
+                  Notifications
+                </Button>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+
+        {/* Delete Confirmation Modal */}
+        {showDeleteConfirm && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <Card className="max-w-md w-full shadow-2xl">
+              <CardContent className="p-8">
+                <div className="text-center space-y-6">
+                  <div className="h-16 w-16 bg-red-100 rounded-full flex items-center justify-center mx-auto">
+                    <Trash2 className="h-8 w-8 text-red-600" />
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-bold text-gray-900 mb-2">Delete Account</h3>
+                    <p className="text-gray-600">
+                      Are you sure you want to permanently delete your account? This action cannot be undone and all your data will be removed.
+                    </p>
+                  </div>
+                  <div className="flex gap-4 pt-4">
+                    <Button 
+                      variant="outline" 
+                      onClick={() => setShowDeleteConfirm(false)}
+                      disabled={loading}
+                      className="flex-1"
+                    >
+                      Cancel
+                    </Button>
+                    <Button 
+                      onClick={handleDelete}
+                      disabled={loading}
+                      className="flex-1 bg-red-600 hover:bg-red-700 text-white"
+                    >
+                      {loading ? (
+                        <div className="h-4 w-4 mr-2 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      ) : (
+                        <Trash2 className="h-4 w-4 mr-2" />
+                      )}
+                      {loading ? 'Deleting...' : 'Delete Account'}
+                    </Button>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
+      </main>
+    </div>
   );
 }
