@@ -11,6 +11,7 @@ import TurfDetailPage from "./pages/TurfDetailPage";
 import BookingPage from "./pages/BookingPage";
 import LoginPage from "./pages/LoginPage";
 import RegisterPage from "./pages/RegisterPage";
+import OtpVerifyPage from "./pages/OtpVerifyPage";
 import ProfilePage from "./pages/ProfilePage";
 import AdminDashboard from "./pages/admin/AdminDashboard";
 import TurfManagementPage from "./pages/admin/TurfManagementPage";
@@ -41,6 +42,7 @@ const App = () => (
               <Route path="/booking" element={<BookingPage />} />
               <Route path="/login" element={<LoginPage />} />
               <Route path="/register" element={<RegisterPage />} />
+              <Route path="/verify-otp" element={<OtpVerifyPage />} />
 
               <Route element={<ProtectedRoute roles={["user", "admin"]} />}>
                 <Route path="/profile" element={<ProfilePage />} />
