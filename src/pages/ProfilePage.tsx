@@ -417,7 +417,7 @@ export default function ProfilePage() {
                             <Phone className="h-4 w-4 mr-2" />
                             Phone Number
                           </div>
-                          <p className="text-lg text-gray-900 font-medium">{form.phone || 'Not provided'}</p>
+                          <p className="text-lg text-gray-900 font-medium">{user.phone || 'Not provided'}</p>
                         </div>
 
                         <div className="space-y-3">
@@ -425,7 +425,7 @@ export default function ProfilePage() {
                             <MapPin className="h-4 w-4 mr-2" />
                             Location
                           </div>
-                          <p className="text-lg text-gray-900 font-medium">{form.location || 'Not provided'}</p>
+                          <p className="text-lg text-gray-900 font-medium">{user.location || 'Not provided'}</p>
                         </div>
 
                         <div className="space-y-3 md:col-span-2">
@@ -433,7 +433,7 @@ export default function ProfilePage() {
                             <Building className="h-4 w-4 mr-2" />
                             Company/Organization
                           </div>
-                          <p className="text-lg text-gray-900 font-medium">{form.company || 'Not provided'}</p>
+                          <p className="text-lg text-gray-900 font-medium">{user.company || 'Not provided'}</p>
                         </div>
                       </div>
                     </div>
