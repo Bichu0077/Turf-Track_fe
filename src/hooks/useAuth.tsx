@@ -4,6 +4,9 @@ import { AuthState, AuthUser, clearAuth, loadAuth, saveAuth, apiRequest } from '
 interface AuthContextValue extends AuthState {
   login: (email: string, password: string) => Promise<void>;
   register: (name: string, email: string, phone: string, password: string, role?: 'user' | 'admin') => Promise<void>;
+  registerStart: (name: string, email: string, phone: string, password: string, role?: 'user' | 'admin') => Promise<{ transactionId: string; email: string; devCode?: string }>;
+  verifyRegistration: (transactionId: string, code: string) => Promise<void>;
+  resendRegistrationOtp: (transactionId: string) => Promise<{ devCode?: string }>;
   logout: () => void;
   refreshMe: () => Promise<void>;
 }
@@ -56,6 +59,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setState({ token: data.token, user: data.user });
   }
 
+  async function registerStart(name: string, email: string, phone: string, password: string, role: 'user' | 'admin' = 'user') {
+    const data = await apiRequest<{ transactionId: string; email: string; expiresInSeconds: number; devCode?: string }>('/api/auth/register/start', {
+      method: 'POST',
+      body: JSON.stringify({ name, email, phone, password, role })
+    });
+    // Do not set auth state yet; wait for OTP verification
+    return { transactionId: data.transactionId, email: data.email, devCode: (data as any).devCode };
+  }
+
+  async function verifyRegistration(transactionId: string, code: string) {
+    const data = await apiRequest<{ token: string; user: AuthUser }>('/api/auth/register/verify', {
+      method: 'POST',
+      body: JSON.stringify({ transactionId, code })
+    });
+    setState({ token: data.token, user: data.user });
+  }
+
+  async function resendRegistrationOtp(transactionId: string) {
+    const data = await apiRequest<{ expiresInSeconds: number; devCode?: string }>('/api/auth/register/resend', {
+      method: 'POST',
+      body: JSON.stringify({ transactionId })
+    });
+    return { devCode: (data as any).devCode };
+  }
+
   function logout() {
     setState({ token: null, user: null });
     clearAuth();
@@ -67,7 +95,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setState((s) => ({ ...s, user: data.user }));
   }
 
-  const value = useMemo<AuthContextValue>(() => ({ ...state, login, register, logout, refreshMe }), [state]);
+  const value = useMemo<AuthContextValue>(() => ({ ...state, login, register, registerStart, verifyRegistration, resendRegistrationOtp, logout, refreshMe }), [state]);
 
   if (!initialized) return null;
 
