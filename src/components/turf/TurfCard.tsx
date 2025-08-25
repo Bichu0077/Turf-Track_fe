@@ -11,14 +11,14 @@ export default function TurfCard({ turf }: Props) {
       <div className="relative aspect-[4/3] overflow-hidden">
         <img
           src={turf.images[0]}
-          alt={`${turf.name} sports turf in ${turf.location}`}
+          alt={`${turf.name} sports turf in ${turf.location.address}`}
           loading="lazy"
           className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.03]"
         />
       </div>
       <CardHeader>
         <CardTitle className="text-lg">{turf.name}</CardTitle>
-        <div className="text-sm text-muted-foreground">{turf.location}</div>
+        <div className="text-sm text-muted-foreground">{turf.location.address}</div>
       </CardHeader>
       <CardContent>
         <p className="line-clamp-2 text-sm text-muted-foreground">{turf.description}</p>
