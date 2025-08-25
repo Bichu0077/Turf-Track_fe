@@ -27,6 +27,7 @@ import {
   Building
 } from "lucide-react";
 
+
 export default function ProfilePage() {
   const { user, token, logout, refreshMe } = useAuth();
   const [editing, setEditing] = useState(false);
@@ -37,7 +38,7 @@ export default function ProfilePage() {
     phone: user?.phone || "",
     location: user?.location || "",
     company: user?.company || "",
-    avatar: (typeof window !== 'undefined' ? sessionStorage.getItem("profile_avatar") : "") || ""
+    avatar: user?.avatar || user?.profile_pic || ""
   });
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [loading, setLoading] = useState(false);
@@ -55,7 +56,7 @@ export default function ProfilePage() {
   async function handleEdit() {
     setLoading(true);
     clearMessages();
-    
+    console.log('Profile update token:', token); // Debug log
     try {
       const response = await fetch("/api/auth/me", {
         method: "PUT",
@@ -68,22 +69,16 @@ export default function ProfilePage() {
           email: form.email.trim(),
           phone: form.phone.trim(),
           location: form.location.trim(),
-          company: form.company.trim()
+          company: form.company.trim(),
+          avatar: form.avatar
         }),
       });
-
       if (!response.ok) {
         throw new Error(`Failed to update profile: ${response.statusText}`);
       }
-
-      if (typeof window !== 'undefined') {
-        sessionStorage.setItem("profile_avatar", form.avatar);
-      }
-      
       await refreshMe();
       setEditing(false);
       setSuccess("Profile updated successfully!");
-      
       setTimeout(() => setSuccess(null), 3000);
     } catch (e: any) {
       setError(e.message || "Failed to update profile");
@@ -95,7 +90,6 @@ export default function ProfilePage() {
   async function handleDelete() {
     setLoading(true);
     clearMessages();
-    
     try {
       const response = await fetch("/api/auth/me", {
         method: "DELETE",
@@ -103,11 +97,9 @@ export default function ProfilePage() {
           Authorization: `Bearer ${token}`,
         },
       });
-
       if (!response.ok) {
         throw new Error(`Failed to delete account: ${response.statusText}`);
       }
-
       logout();
     } catch (e: any) {
       setError(e.message || "Failed to delete account");
@@ -120,19 +112,15 @@ export default function ProfilePage() {
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-
     if (file.size > 5 * 1024 * 1024) {
       setError("Image size must be less than 5MB");
       return;
     }
-
-    if (!file.type.startsWith('image/')) {
+    if (!file.type.startsWith("image/")) {
       setError("Please select a valid image file");
       return;
     }
-
     clearMessages();
-
     const reader = new FileReader();
     reader.onload = () => {
       setForm(f => ({ ...f, avatar: reader.result as string }));
@@ -151,14 +139,14 @@ export default function ProfilePage() {
       phone: user?.phone || "",
       location: user?.location || "",
       company: user?.company || "",
-      avatar: (typeof window !== 'undefined' ? sessionStorage.getItem("profile_avatar") : "") || ""
+      avatar: user?.avatar || user?.profile_pic || ""
     });
     setEditing(false);
     clearMessages();
   };
 
   const getRoleConfig = (role: string) => {
-    switch (role?.toLowerCase()) {
+    switch (role) {
       case 'admin':
         return { color: 'bg-red-50 text-red-700 border-red-200', icon: Shield };
       case 'moderator':
@@ -186,7 +174,7 @@ export default function ProfilePage() {
           <div className="flex items-center space-x-6">
             <div className="relative">
               <Avatar className="h-20 w-20 border-4 border-green-100 shadow-lg">
-                <AvatarImage src={form.avatar || undefined} alt={user.name} className="object-cover" />
+                <AvatarImage src={form.avatar} alt={user.name} />
                 <AvatarFallback className="text-2xl font-bold bg-gradient-to-br from-green-100 to-green-200 text-green-700">
                   {user.name[0]?.toUpperCase()}
                 </AvatarFallback>
@@ -248,21 +236,18 @@ export default function ProfilePage() {
       </div>
 
       <main className="container mx-auto px-6 py-8 max-w-6xl">
-        {/* Messages */}
         {error && (
           <Alert className="mb-6 border-red-200 bg-red-50">
             <AlertCircle className="h-4 w-4 text-red-600" />
             <AlertDescription className="text-red-700">{error}</AlertDescription>
           </Alert>
         )}
-
         {success && (
           <Alert className="mb-6 border-green-200 bg-green-50">
             <CheckCircle className="h-4 w-4 text-green-600" />
             <AlertDescription className="text-green-700">{success}</AlertDescription>
           </Alert>
         )}
-
         <div className="grid gap-8 lg:grid-cols-3">
           <div className="lg:col-span-2">
             {activeTab === 'profile' && (
@@ -292,7 +277,6 @@ export default function ProfilePage() {
                     className="hidden"
                     onChange={handleImageUpload}
                   />
-
                   {editing ? (
                     <div className="space-y-6">
                       <div className="grid gap-6 md:grid-cols-2">
@@ -310,7 +294,6 @@ export default function ProfilePage() {
                             required
                           />
                         </div>
-
                         <div className="space-y-2">
                           <label className="flex items-center text-sm font-medium text-gray-700">
                             <Mail className="h-4 w-4 mr-2 text-green-600" />
@@ -325,7 +308,6 @@ export default function ProfilePage() {
                             required
                           />
                         </div>
-
                         <div className="space-y-2">
                           <label className="flex items-center text-sm font-medium text-gray-700">
                             <Phone className="h-4 w-4 mr-2 text-green-600" />
@@ -339,7 +321,6 @@ export default function ProfilePage() {
                             placeholder="Enter your phone number"
                           />
                         </div>
-
                         <div className="space-y-2">
                           <label className="flex items-center text-sm font-medium text-gray-700">
                             <MapPin className="h-4 w-4 mr-2 text-green-600" />
@@ -353,7 +334,6 @@ export default function ProfilePage() {
                             placeholder="Enter your location"
                           />
                         </div>
-
                         <div className="space-y-2 md:col-span-2">
                           <label className="flex items-center text-sm font-medium text-gray-700">
                             <Building className="h-4 w-4 mr-2 text-green-600" />
@@ -368,7 +348,6 @@ export default function ProfilePage() {
                           />
                         </div>
                       </div>
-
                       <div className="flex gap-4 pt-6 border-t border-gray-100">
                         <Button 
                           onClick={handleEdit}
@@ -403,7 +382,6 @@ export default function ProfilePage() {
                           </div>
                           <p className="text-lg text-gray-900 font-medium">{user.name}</p>
                         </div>
-
                         <div className="space-y-3">
                           <div className="flex items-center text-sm font-medium text-gray-500">
                             <Mail className="h-4 w-4 mr-2" />
@@ -411,7 +389,6 @@ export default function ProfilePage() {
                           </div>
                           <p className="text-lg text-gray-900 font-medium">{user.email}</p>
                         </div>
-
                         <div className="space-y-3">
                           <div className="flex items-center text-sm font-medium text-gray-500">
                             <Phone className="h-4 w-4 mr-2" />
@@ -419,7 +396,6 @@ export default function ProfilePage() {
                           </div>
                           <p className="text-lg text-gray-900 font-medium">{user.phone || 'Not provided'}</p>
                         </div>
-
                         <div className="space-y-3">
                           <div className="flex items-center text-sm font-medium text-gray-500">
                             <MapPin className="h-4 w-4 mr-2" />
@@ -427,7 +403,6 @@ export default function ProfilePage() {
                           </div>
                           <p className="text-lg text-gray-900 font-medium">{user.location || 'Not provided'}</p>
                         </div>
-
                         <div className="space-y-3 md:col-span-2">
                           <div className="flex items-center text-sm font-medium text-gray-500">
                             <Building className="h-4 w-4 mr-2" />
@@ -459,7 +434,6 @@ export default function ProfilePage() {
                         Change Password
                       </Button>
                     </div>
-
                     <div className="flex items-center justify-between p-6 bg-gray-50 rounded-lg">
                       <div>
                         <h3 className="text-lg font-semibold text-gray-900">Two-Factor Authentication</h3>
@@ -469,7 +443,6 @@ export default function ProfilePage() {
                         Enable 2FA
                       </Button>
                     </div>
-
                     <div className="border-t border-red-100 pt-8">
                       <div className="bg-red-50 border border-red-200 rounded-lg p-6">
                         <h3 className="text-lg font-semibold text-red-900 mb-2">Delete Account</h3>
@@ -546,7 +519,6 @@ export default function ProfilePage() {
                 </div>
               </CardContent>
             </Card>
-
             <Card className="shadow-lg border-0 bg-white">
               <CardHeader>
                 <h3 className="text-lg font-semibold text-gray-900">Quick Actions</h3>
