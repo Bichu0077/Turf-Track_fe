@@ -61,7 +61,7 @@ export default function TurfDetailPage() {
     <main className="container py-8">
       <Helmet>
         <title>{turf.name}</title>
-        <meta name="description" content={`Book ${turf.name} located at ${turf.location}. Available hourly slots and amenities.`} />
+        <meta name="description" content={`Book ${turf.name} located at ${turf.location.address}. Available hourly slots and amenities.`} />
         <link rel="canonical" href={`/turfs/${turf.id}`} />
         <script type="application/ld+json">{JSON.stringify({
           '@context': 'https://schema.org', '@type': 'Product', name: turf.name, description: turf.description, offers: { '@type': 'Offer', priceCurrency: 'INR', price: turf.pricePerHour }
@@ -80,7 +80,7 @@ export default function TurfDetailPage() {
         <div className="space-y-6">
           <div>
             <h1 className="text-3xl font-bold">{turf.name}</h1>
-            <p className="text-muted-foreground">{turf.location}</p>
+            <p className="text-muted-foreground">{turf.location.address}</p>
           </div>
           <p className="text-muted-foreground">{turf.description}</p>
 
