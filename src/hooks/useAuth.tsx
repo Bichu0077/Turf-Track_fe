@@ -14,7 +14,12 @@ interface AuthContextValue extends AuthState {
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [state, setState] = useState<AuthState>(() => loadAuth());
+
+  // Only store token in localStorage, always fetch user from backend
+  const [state, setState] = useState<AuthState>(() => {
+    const { token } = loadAuth();
+    return { user: null, token };
+  });
   const [initialized, setInitialized] = useState(false);
 
   useEffect(() => {
@@ -28,27 +33,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
       } catch {}
 
-      if (state.token && !state.user) {
+      // Always fetch user from backend if token exists
+      if (state.token) {
+        console.log('[Auth] Token before /api/auth/me:', state.token);
         try {
-          const data = await apiRequest<{ user: AuthUser }>('/api/auth/me');
+          const data = await apiRequest<{ user: AuthUser }>('/api/auth/me', {}, state.token);
           setState((s) => ({ ...s, user: data.user }));
-        } catch {
+        } catch (err) {
+          console.error('[Auth] Error fetching /api/auth/me:', err);
           setState({ user: null, token: null });
           clearAuth();
         }
       }
       setInitialized(true);
     })();
-  }, []);
+  }, [state.token]);
 
-  useEffect(() => { saveAuth(state); }, [state]);
+  // Only store token in localStorage
+  useEffect(() => { saveAuth({ token: state.token, user: null }); }, [state.token]);
 
   async function login(email: string, password: string) {
     const data = await apiRequest<{ token: string; user: AuthUser }>('/api/auth/login', {
       method: 'POST',
       body: JSON.stringify({ email, password })
     });
-    setState({ token: data.token, user: data.user });
+    setState({ token: data.token, user: null }); // user will be fetched by effect
   }
 
   async function register(name: string, email: string, phone: string, password: string, role: 'user' | 'admin' = 'user') {
@@ -56,7 +65,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       method: 'POST',
       body: JSON.stringify({ name, email, phone, password, role })
     });
-    setState({ token: data.token, user: data.user });
+    setState({ token: data.token, user: null }); // user will be fetched by effect
   }
 
   async function registerStart(name: string, email: string, phone: string, password: string, role: 'user' | 'admin' = 'user') {
@@ -73,7 +82,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       method: 'POST',
       body: JSON.stringify({ transactionId, code })
     });
-    setState({ token: data.token, user: data.user });
+    setState({ token: data.token, user: null }); // user will be fetched by effect
   }
 
   async function resendRegistrationOtp(transactionId: string) {
