@@ -1,10 +1,10 @@
 import { Helmet } from "react-helmet-async";
 import { useParams, useNavigate } from "react-router-dom";
-import TimeSlotPicker from "@/components/turf/TimeSlotPicker";
+// import TimeSlotPicker from "@/components/turf/TimeSlotPicker";
 import { Calendar } from "@/components/ui/calendar";
 import { Button } from "@/components/ui/button";
 import { useEffect, useState } from "react";
-import { format } from "date-fns";
+import { format, setHours, setMinutes, isBefore, isSameDay } from "date-fns";
 import { apiRequest } from "@/lib/auth";
 import type { Turf } from "@/types";
 
@@ -14,7 +14,7 @@ export default function TurfDetailPage() {
   const [turf, setTurf] = useState<Turf | null>(null);
   const [loading, setLoading] = useState(true);
   const [date, setDate] = useState<Date | undefined>(new Date());
-  const [time, setTime] = useState<string | null>(null);
+  const [selectedSlots, setSelectedSlots] = useState<string[]>([]);
 
   useEffect(() => {
     (async () => {
@@ -57,6 +57,42 @@ export default function TurfDetailPage() {
     );
   }
 
+  // Only calculate these after turf is loaded
+  const openHour = turf.operatingHours.open ? parseInt(turf.operatingHours.open.split(":")[0]) : 6;
+  const closeHour = turf.operatingHours.close ? parseInt(turf.operatingHours.close.split(":")[0]) : 22;
+  const hours = Array.from({length: closeHour - openHour}, (_, i) => `${(openHour + i).toString().padStart(2, '0')}:00`);
+  // New selection logic: one-click for single slot, two-click for range
+  let startTime = "";
+  let endTime = "";
+  let duration = 0;
+  if (selectedSlots.length === 1) {
+    startTime = selectedSlots[0];
+    const s = parseInt(startTime);
+    duration = 1;
+    endTime = (s + 1).toString().padStart(2, '0') + ":00";
+  } else if (selectedSlots.length > 1) {
+    const sorted = selectedSlots.map(t => parseInt(t)).sort((a, b) => a - b);
+    const s = sorted[0];
+    const e = sorted[sorted.length - 1] + 1;
+    startTime = s.toString().padStart(2, '0') + ":00";
+    endTime = e.toString().padStart(2, '0') + ":00";
+    duration = e - s;
+  }
+  const total = duration > 0 ? turf.pricePerHour * duration : 0;
+
+  // Helper to format time as 12-hour with AM/PM
+  function format12HourRange(start: string, end: string) {
+    const [sh, sm] = start.split(":").map(Number);
+    const [eh, em] = end.split(":").map(Number);
+    const startDate = setMinutes(setHours(new Date(), sh), sm);
+    const endDate = setMinutes(setHours(new Date(), eh), em);
+    return `${format(startDate, "h:mm a")} - ${format(endDate, "h:mm a")}`;
+  }
+
+  // For disabling past slots
+  const now = new Date();
+  const isToday = date && isSameDay(date, now);
+
   return (
     <main className="container py-8">
       <Helmet>
@@ -95,12 +131,65 @@ export default function TurfDetailPage() {
               />
             </div>
             <div>
-              <h2 className="mb-3 text-sm font-semibold">Available time</h2>
-              <TimeSlotPicker
-                operatingHours={turf.operatingHours}
-                bookedTimes={[]}
-                onSelect={setTime}
-              />
+              <h2 className="mb-3 text-sm font-semibold">Select time slot</h2>
+              <div className="flex flex-wrap gap-2">
+                {hours.map((h, idx) => {
+                  const hourNum = parseInt(h);
+                  const nextHour = (hourNum + 1).toString().padStart(2, '0') + ":00";
+                  // Disable if slot is in the past (today and before now)
+                  let isPast = false;
+                  if (isToday) {
+                    const slotDate = setMinutes(setHours(date, hourNum), 0);
+                    isPast = isBefore(slotDate, now);
+                  }
+                  let isSelected = false;
+                  if (selectedSlots.length === 1) {
+                    isSelected = selectedSlots[0] === h;
+                  } else if (selectedSlots.length > 1) {
+                    const sorted = selectedSlots.map(t => parseInt(t)).sort((a, b) => a - b);
+                    const s = sorted[0];
+                    const e = sorted[sorted.length - 1];
+                    isSelected = hourNum >= s && hourNum < e + 1;
+                  }
+                  return (
+                    <button
+                      type="button"
+                      key={h}
+                      data-time={h}
+                      className={
+                        isSelected
+                          ? 'bg-primary text-white border-primary border rounded px-4 py-2 font-semibold'
+                          : isPast
+                          ? 'bg-gray-200 text-gray-400 border border-gray-200 rounded px-4 py-2 cursor-not-allowed'
+                          : 'bg-white text-primary border border-primary rounded px-4 py-2 hover:bg-primary hover:text-white transition'
+                      }
+                      disabled={isPast}
+                      onClick={() => {
+                        if (isPast) return;
+                        if (selectedSlots.length === 0) {
+                          setSelectedSlots([h]);
+                        } else if (selectedSlots.length === 1) {
+                          if (selectedSlots[0] === h) {
+                            // Deselect
+                            setSelectedSlots([]);
+                          } else {
+                            // Range: always from earliest to latest
+                            setSelectedSlots([selectedSlots[0], h]);
+                          }
+                        } else {
+                          // Any further click resets selection to new single slot
+                          setSelectedSlots([h]);
+                        }
+                      }}
+                    >
+                      {format12HourRange(h, nextHour)}
+                    </button>
+                  );
+                })}
+              </div>
+              {duration > 0 && (
+                <div className="mt-2 text-primary font-semibold">Total: ₹{total}</div>
+              )}
             </div>
           </div>
 
@@ -108,20 +197,22 @@ export default function TurfDetailPage() {
             <div className="text-lg font-semibold">₹{turf.pricePerHour} / hr</div>
             <Button
               variant="hero"
-              disabled={!date || !time}
+              disabled={!date || !(startTime && endTime && duration > 0)}
               onClick={() => {
-                navigate("/booking", {
+                navigate("/checkout", {
                   state: {
                     turfId: turf.id,
                     turfName: turf.name,
                     pricePerHour: turf.pricePerHour,
                     date: date ? format(date, 'yyyy-MM-dd') : null,
-                    time,
+                    startTime,
+                    endTime,
+                    total,
                   },
                 });
               }}
             >
-              Book now
+              Proceed to Checkout
             </Button>
           </div>
         </div>

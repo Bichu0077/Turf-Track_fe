@@ -15,10 +15,34 @@ const Slider = React.forwardRef<
     )}
     {...props}
   >
-    <SliderPrimitive.Track className="relative h-2 w-full grow overflow-hidden rounded-full bg-secondary">
-      <SliderPrimitive.Range className="absolute h-full bg-primary" />
+    <SliderPrimitive.Track className="relative h-1 w-full grow overflow-hidden rounded-full bg-muted">
+      <SliderPrimitive.Range className="absolute h-2 top-[-4px] rounded-full" style={{ background: 'var(--gradient-hero)' }} />
     </SliderPrimitive.Track>
-    <SliderPrimitive.Thumb className="block h-5 w-5 rounded-full border-2 border-primary bg-background ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50" />
+    {/* Custom thumb: dual circle, teal ring, glow, hover enlarge */}
+    {Array.isArray(props.value) && props.value.length === 2
+      ? [0, 1].map(i => (
+          <SliderPrimitive.Thumb
+            key={i}
+            className={
+              "group block h-5 w-5 rounded-full border-4 border-[#008296] bg-white shadow-[0_0_0_2px_rgba(0,130,150,0.15)] transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#008296] focus-visible:ring-offset-2 hover:scale-110" +
+              " flex items-center justify-center"
+            }
+            style={{ boxShadow: '0 2px 8px 0 rgba(0,130,150,0.10)' }}
+          >
+            <span className="block h-2.5 w-2.5 rounded-full bg-white" />
+          </SliderPrimitive.Thumb>
+        ))
+      : (
+        <SliderPrimitive.Thumb
+          className={
+            "group block h-5 w-5 rounded-full border-4 border-[#008296] bg-white shadow-[0_0_0_2px_rgba(0,130,150,0.15)] transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#008296] focus-visible:ring-offset-2 hover:scale-110" +
+            " flex items-center justify-center"
+          }
+          style={{ boxShadow: '0 2px 8px 0 rgba(0,130,150,0.10)' }}
+        >
+          <span className="block h-2.5 w-2.5 rounded-full bg-white" />
+        </SliderPrimitive.Thumb>
+      )}
   </SliderPrimitive.Root>
 ))
 Slider.displayName = SliderPrimitive.Root.displayName

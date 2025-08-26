@@ -18,6 +18,7 @@ import AdminDashboard from "./pages/admin/AdminDashboard";
 import TurfManagementPage from "./pages/admin/TurfManagementPage";
 import BookingManagementPage from "./pages/admin/BookingManagementPage";
 import ReportsPage from "./pages/admin/ReportsPage";
+import CheckoutPage from "./pages/CheckoutPage";
 import { AuthProvider } from "@/hooks/useAuth";
 import ProtectedRoute from "@/components/ProtectedRoute";
 
@@ -41,9 +42,11 @@ const App = () => (
               <Route path="/" element={<Index />} />
               <Route path="/turfs/:id" element={<TurfDetailPage />} />
               <Route path="/booking" element={<BookingPage />} />
+
               <Route path="/login" element={<LoginPage />} />
               <Route path="/register" element={<RegisterPage />} />
               <Route path="/verify-otp" element={<OtpVerifyPage />} />
+              <Route path="/checkout" element={<CheckoutPage />} />
 
               <Route element={<ProtectedRoute roles={["user", "admin"]} />}>
                 <Route path="/profile" element={<ProfilePage />} />

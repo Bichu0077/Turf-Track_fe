@@ -11,8 +11,19 @@ function Calendar({
   className,
   classNames,
   showOutsideDays = true,
+  disabled,
   ...props
 }: CalendarProps) {
+  // Disable all past dates by default
+  const today = new Date();
+  const maxDate = new Date(today);
+  maxDate.setDate(today.getDate() + 14);
+  const disabledFn = (date: Date) => {
+    // Remove time portion for comparison
+    const d = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    const t = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    return d < t || d > maxDate;
+  };
   return (
     <DayPicker
       showOutsideDays={showOutsideDays}
@@ -55,6 +66,7 @@ function Calendar({
         IconLeft: ({ ..._props }) => <ChevronLeft className="h-4 w-4" />,
         IconRight: ({ ..._props }) => <ChevronRight className="h-4 w-4" />,
       }}
+      disabled={disabled || disabledFn}
       {...props}
     />
   );
