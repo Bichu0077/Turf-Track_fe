@@ -26,11 +26,16 @@ export function clearAuth() {
   localStorage.removeItem(STORAGE_KEY);
 }
 
-export async function apiRequest<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const { token } = loadAuth();
+export async function apiRequest<T>(path: string, options: RequestInit = {}, tokenOverride?: string | null): Promise<T> {
+  let token = tokenOverride;
+  if (typeof token === 'undefined') {
+    token = loadAuth().token;
+  }
   const headers = new Headers(options.headers || {});
   headers.set('Content-Type', 'application/json');
   if (token) headers.set('Authorization', `Bearer ${token}`);
+  // Debug log for outgoing request
+  console.log('[apiRequest] Request to', path, 'with headers:', Object.fromEntries(headers.entries()));
   const res = await fetch(path, { ...options, headers });
   if (!res.ok) {
     const msg = await res.text().catch(() => 'Request failed');
