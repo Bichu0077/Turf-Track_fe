@@ -6,11 +6,15 @@ import TurfCard from "@/components/turf/TurfCard";
 import { useEffect, useMemo, useState, useRef } from "react";
 import { apiRequest } from "@/lib/auth";
 import type { Turf } from "@/types";
-import GreenScreenBackground from "@/components/visual/GreenScreenBackground";
+import React from "react";
+import GreenScreenBackgroundOrig from "@/components/visual/GreenScreenBackground";
+const GreenScreenBackground = React.memo(GreenScreenBackgroundOrig);
 
 const Index = () => {
   const [query, setQuery] = useState("");
-  const [price, setPrice] = useState<number[]>([600, 2000]);
+  const [price, setPrice] = useState<number[]>([500, 2000]);
+  const SLIDER_MIN = 500;
+  const SLIDER_MAX = 2000;
   const [turfs, setTurfs] = useState<Turf[]>([]);
   const [loading, setLoading] = useState(true);
   const turfsRef = useRef<HTMLDivElement>(null);
@@ -47,6 +51,12 @@ const Index = () => {
       return matchQ && matchP;
     });
   }, [turfs, query, price]);
+
+  // Memoize sources so the array reference doesn't change on every render
+  const bgSources = React.useMemo(() => [
+    { src: "/videos/ronaldhino_clip.mp4", fit: "cover" as const, scale: 1, dxPercent: 0, dyPercent: 0 },
+    { src: "/videos/messi_clip.mp4", fit: "cover" as const, scale: 1, dxPercent: 0, dyPercent: 0 },
+  ], []);
 
   return (
     <main className="relative overflow-hidden">
@@ -92,7 +102,9 @@ const Index = () => {
               pixelSize={1}
               fps={30}
               disableOnMobile={false}
-              sources={["/videos/ronaldhino_clip.mp4"]}
+              carousel
+              carouselIntervalMs={7000}
+              sources={bgSources}
               edgeSmooth
               soften
             />
@@ -114,8 +126,29 @@ const Index = () => {
               />
             </div>
             <div className="md:col-span-2">
-              <label className="mb-2 block text-sm font-medium">Price per hour (₹{price[0]} - ₹{price[1]})</label>
-              <Slider value={price} min={500} max={2500} step={100} onValueChange={setPrice} />
+              <label className="mb-2 block text-sm font-medium">Price</label>
+              <div className="flex items-center gap-2">
+                <div className="flex-1 flex flex-col items-center max-w-[400px] w-full">
+                  {/* Value labels above thumbs */}
+                  <div className="relative w-full flex justify-between mb-1" style={{height: '18px'}}>
+                    <span className="absolute left-0 text-xs font-semibold bg-white px-1 rounded shadow-sm" style={{transform: 'translateY(-8px)'}}>
+                      ₹{price[0]}
+                    </span>
+                    <span className="absolute right-0 text-xs font-semibold bg-white px-1 rounded shadow-sm" style={{transform: 'translateY(-8px)'}}>
+                      {price[1] === SLIDER_MAX ? `₹${SLIDER_MAX}+` : `₹${price[1]}`}
+                    </span>
+                  </div>
+                  <Slider
+                    value={price}
+                    min={SLIDER_MIN}
+                    max={SLIDER_MAX}
+                    step={50}
+                    onValueChange={([min, max]) => setPrice([Math.min(min, max), Math.max(min, max)])}
+                    className="h-1 w-56 max-w-full [&_[role=slider]]:h-3 [&_[role=slider]]:w-3 [&_[role=slider]]:border-2 [&_[role=slider]]:border-primary [&_[role=slider]]:bg-primary [&_[role=slider]]:shadow-sm"
+                  />
+                </div>
+                <Button variant="outline" size="sm">Go</Button>
+              </div>
             </div>
           </div>
         </div>
