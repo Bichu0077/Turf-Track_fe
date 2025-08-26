@@ -6,27 +6,107 @@ import TurfCard from "@/components/turf/TurfCard";
 import { useEffect, useMemo, useState, useRef } from "react";
 import { apiRequest } from "@/lib/auth";
 import type { Turf } from "@/types";
-import React from "react";
-import GreenScreenBackgroundOrig from "@/components/visual/GreenScreenBackground";
-const GreenScreenBackground = React.memo(GreenScreenBackgroundOrig);
+import GreenScreenBackground from "@/components/visual/GreenScreenBackground";
+
+interface LocationSuggestion {
+  display_name: string;
+  lat: string;
+  lon: string;
+  place_id: number;
+}
 
 const Index = () => {
   const [query, setQuery] = useState("");
-  const [price, setPrice] = useState<number[]>([500, 2000]);
-  const SLIDER_MIN = 500;
-  const SLIDER_MAX = 2000;
+  const [price, setPrice] = useState<number[]>([600, 2000]);
   const [turfs, setTurfs] = useState<Turf[]>([]);
   const [loading, setLoading] = useState(true);
   const turfsRef = useRef<HTMLDivElement>(null);
+  
+  // Location search states
+  const [locationQuery, setLocationQuery] = useState("");
+  const [locationSuggestions, setLocationSuggestions] = useState<LocationSuggestion[]>([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [selectedLocation, setSelectedLocation] = useState<{lat: number, lon: number, address: string} | null>(null);
+  const [searchingLocations, setSearchingLocations] = useState(false);
+  const locationInputRef = useRef<HTMLInputElement>(null);
+  const suggestionsRef = useRef<HTMLDivElement>(null);
 
+  // Debounce for location search
+  useEffect(() => {
+    if (locationQuery.trim().length < 3) {
+      setLocationSuggestions([]);
+      setShowSuggestions(false);
+      return;
+    }
+
+    const timer = setTimeout(async () => {
+      setSearchingLocations(true);
+      try {
+        const response = await fetch(
+          `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(locationQuery)}&format=json&limit=5&countrycodes=IN&addressdetails=1`
+        );
+        const data = await response.json();
+        setLocationSuggestions(data);
+        setShowSuggestions(true);
+      } catch (error) {
+        console.error('Location search error:', error);
+        setLocationSuggestions([]);
+      } finally {
+        setSearchingLocations(false);
+      }
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [locationQuery]);
+
+  // Handle clicking outside suggestions
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        suggestionsRef.current && 
+        !suggestionsRef.current.contains(event.target as Node) &&
+        locationInputRef.current &&
+        !locationInputRef.current.contains(event.target as Node)
+      ) {
+        setShowSuggestions(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const handleLocationSelect = (suggestion: LocationSuggestion) => {
+    setSelectedLocation({
+      lat: parseFloat(suggestion.lat),
+      lon: parseFloat(suggestion.lon),
+      address: suggestion.display_name.split(',').slice(0, 2).join(', ')
+    });
+    setLocationQuery(suggestion.display_name.split(',').slice(0, 2).join(', '));
+    setShowSuggestions(false);
+  };
+
+  const clearLocation = () => {
+    setSelectedLocation(null);
+    setLocationQuery("");
+    setLocationSuggestions([]);
+    setShowSuggestions(false);
+  };
+
+  // Fetch turfs, optionally filtered by location
   useEffect(() => {
     (async () => {
+      setLoading(true);
+      let url = "/api/turfs/public";
+      if (selectedLocation) {
+        url += `?lat=${selectedLocation.lat}&lon=${selectedLocation.lon}&radius=10`;
+      }
       try {
-        const data = await apiRequest<{ turfs: any[] }>("/api/turfs/public");
-        const mapped: Turf[] = (data.turfs || []).map((t) => ({
+        const data = await apiRequest<{ turfs: any[] }>(url);
+        const mapped: Turf[] = (data.turfs || []).map((t: any) => ({
           id: t._id ?? t.id,
           name: t.name,
-          location: t.location,
+          location: t.location ?? null,
           description: t.description ?? "",
           images: Array.isArray(t.images) && t.images.length > 0 ? t.images : ["/placeholder.svg"],
           pricePerHour: Number(t.pricePerHour ?? 0),
@@ -40,23 +120,23 @@ const Index = () => {
         setLoading(false);
       }
     })();
-  }, []);
+  }, [selectedLocation]);
 
   const filtered = useMemo(() => {
     return turfs.filter((t) => {
-      const matchQ = `${t.name} ${t.location} ${t.amenities.join(" ")}`
+      let locationText = "";
+      if (t.location && typeof t.location === "object" && t.location !== null && (t.location as any).address) {
+        locationText = (t.location as any).address;
+      } else if (t.location) {
+        locationText = t.location;
+      }
+      const matchQ = `${t.name} ${locationText} ${t.amenities.join(" ")}`
         .toLowerCase()
         .includes(query.toLowerCase());
       const matchP = t.pricePerHour >= price[0] && t.pricePerHour <= price[1];
       return matchQ && matchP;
     });
   }, [turfs, query, price]);
-
-  // Memoize sources so the array reference doesn't change on every render
-  const bgSources = React.useMemo(() => [
-    { src: "/videos/ronaldhino_clip.mp4", fit: "cover" as const, scale: 1, dxPercent: 0, dyPercent: 0 },
-    { src: "/videos/messi_clip.mp4", fit: "cover" as const, scale: 1, dxPercent: 0, dyPercent: 0 },
-  ], []);
 
   return (
     <main className="relative overflow-hidden">
@@ -102,9 +182,7 @@ const Index = () => {
               pixelSize={1}
               fps={30}
               disableOnMobile={false}
-              carousel
-              carouselIntervalMs={7000}
-              sources={bgSources}
+              sources={["/videos/ronaldhino_clip.mp4"]}
               edgeSmooth
               soften
             />
@@ -116,38 +194,85 @@ const Index = () => {
       {/* Filters */}
       <section className="section-soft border-t">
         <div className="container py-8">
-          <div className="grid gap-4 md:grid-cols-3">
-            <div>
-              <label className="mb-2 block text-sm font-medium">Search</label>
+          <div className="grid gap-6 md:grid-cols-3 lg:gap-8">
+            {/* Search Filter */}
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-foreground">Search</label>
               <Input
                 placeholder="Search by name, location or amenity"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
+                className="h-11"
               />
             </div>
-            <div className="md:col-span-2">
-              <label className="mb-2 block text-sm font-medium">Price</label>
-              <div className="flex items-center gap-2">
-                <div className="flex-1 flex flex-col items-center max-w-[400px] w-full">
-                  {/* Value labels above thumbs */}
-                  <div className="relative w-full flex justify-between mb-1" style={{height: '18px'}}>
-                    <span className="absolute left-0 text-xs font-semibold bg-white px-1 rounded shadow-sm" style={{transform: 'translateY(-8px)'}}>
-                      ₹{price[0]}
-                    </span>
-                    <span className="absolute right-0 text-xs font-semibold bg-white px-1 rounded shadow-sm" style={{transform: 'translateY(-8px)'}}>
-                      {price[1] === SLIDER_MAX ? `₹${SLIDER_MAX}+` : `₹${price[1]}`}
-                    </span>
+
+            {/* Location Filter with Autocomplete */}
+            <div className="space-y-2 relative">
+              <label className="text-sm font-medium text-foreground">
+                Location {selectedLocation && <span className="text-xs text-muted-foreground">(10km radius)</span>}
+              </label>
+              <div className="relative">
+                <Input
+                  ref={locationInputRef}
+                  placeholder="Start typing city name..."
+                  value={locationQuery}
+                  onChange={(e) => setLocationQuery(e.target.value)}
+                  onFocus={() => locationSuggestions.length > 0 && setShowSuggestions(true)}
+                  className="h-11"
+                />
+                {searchingLocations && (
+                  <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary"></div>
                   </div>
-                  <Slider
-                    value={price}
-                    min={SLIDER_MIN}
-                    max={SLIDER_MAX}
-                    step={50}
-                    onValueChange={([min, max]) => setPrice([Math.min(min, max), Math.max(min, max)])}
-                    className="h-1 w-56 max-w-full [&_[role=slider]]:h-3 [&_[role=slider]]:w-3 [&_[role=slider]]:border-2 [&_[role=slider]]:border-primary [&_[role=slider]]:bg-primary [&_[role=slider]]:shadow-sm"
-                  />
-                </div>
-                <Button variant="outline" size="sm">Go</Button>
+                )}
+                {showSuggestions && locationSuggestions.length > 0 && (
+                  <div
+                    ref={suggestionsRef}
+                    className="absolute top-full left-0 right-0 z-50 mt-1 bg-background border border-input rounded-md shadow-lg max-h-48 overflow-y-auto"
+                  >
+                    {locationSuggestions.map((suggestion) => (
+                      <button
+                        key={suggestion.place_id}
+                        className="w-full text-left px-3 py-2 hover:bg-accent hover:text-accent-foreground text-sm border-b border-border last:border-b-0 focus:bg-accent focus:text-accent-foreground focus:outline-none"
+                        onClick={() => handleLocationSelect(suggestion)}
+                      >
+                        <div className="truncate">
+                          {suggestion.display_name.split(',').slice(0, 2).join(', ')}
+                        </div>
+                        <div className="text-xs text-muted-foreground truncate">
+                          {suggestion.display_name.split(',').slice(2).join(', ')}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+              {selectedLocation && (
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  onClick={clearLocation}
+                  className="h-8 text-xs"
+                >
+                  Clear location
+                </Button>
+              )}
+            </div>
+
+            {/* Price Filter */}
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-foreground">
+                Price per hour (₹{price[0]} - ₹{price[1]})
+              </label>
+              <div className="pt-2">
+                <Slider 
+                  value={price} 
+                  min={500} 
+                  max={2500} 
+                  step={100} 
+                  onValueChange={setPrice}
+                  className="w-full"
+                />
               </div>
             </div>
           </div>
@@ -156,10 +281,34 @@ const Index = () => {
 
       {/* List */}
       <section className="container py-10" ref={turfsRef}>
+        <div className="mb-6">
+          <h2 className="text-2xl font-bold">
+            {selectedLocation ? `Turfs near ${selectedLocation.address}` : 'All Turfs'} 
+            <span className="text-sm font-normal text-muted-foreground ml-2">
+              ({filtered.length} found)
+            </span>
+          </h2>
+        </div>
         <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          {loading && <div className="text-sm text-muted-foreground">Loading turfs...</div>}
+          {loading && (
+            <div className="col-span-full flex items-center justify-center py-12">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+              <span className="ml-3 text-sm text-muted-foreground">Loading turfs...</span>
+            </div>
+          )}
           {!loading && filtered.length === 0 && (
-            <div className="text-sm text-muted-foreground">No turfs found.</div>
+            <div className="col-span-full text-center py-12">
+              <p className="text-muted-foreground">No turfs found matching your criteria.</p>
+              {selectedLocation && (
+                <Button 
+                  variant="outline" 
+                  onClick={clearLocation}
+                  className="mt-4"
+                >
+                  Clear location filter
+                </Button>
+              )}
+            </div>
           )}
           {!loading && filtered.map((t) => (
             <TurfCard key={t.id} turf={t} />
