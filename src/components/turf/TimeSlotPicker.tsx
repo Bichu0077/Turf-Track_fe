@@ -3,6 +3,7 @@ import { useMemo, useState } from "react";
 interface Props {
   operatingHours: { open: string; close: string };
   bookedTimes?: string[]; // ["14:00", "15:00"] for the chosen date
+  selectedDate: Date;
   onSelect: (times: string[]) => void;
 }
 
@@ -17,7 +18,7 @@ function toTime(m: number) {
   return `${h}:${mm}`;
 }
 
-export default function TimeSlotPicker({ operatingHours, bookedTimes = [], onSelect }: Props) {
+export default function TimeSlotPicker({ operatingHours, bookedTimes = [], selectedDate, onSelect }: Props) {
   const [selectedSlots, setSelectedSlots] = useState<string[]>([]);
 
   const slots = useMemo(() => {
@@ -65,12 +66,13 @@ export default function TimeSlotPicker({ operatingHours, bookedTimes = [], onSel
       {slots.map((t, idx) => {
         // Disable if booked or lapsed
         let isDisabled = bookedTimes.includes(t);
-        // Disable lapsed slots for today
+        // Only disable lapsed slots if selectedDate is today
         const now = new Date();
         const slotHour = parseInt(t.split(":")[0], 10);
         const slotMinute = parseInt(t.split(":")[1], 10);
-        const slotDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), slotHour, slotMinute);
-        if (slotDate < now) {
+        const slotDate = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate(), slotHour, slotMinute);
+        const isToday = selectedDate.toDateString() === now.toDateString();
+        if (isToday && slotDate < now) {
           isDisabled = true;
         }
         const isSelected = selectedSlots.includes(t);
@@ -83,40 +85,33 @@ export default function TimeSlotPicker({ operatingHours, bookedTimes = [], onSel
           <button
             key={t}
             onClick={() => {
-              console.log('Clicked slot:', t, 'at index:', idx); // Debug log
               if (isDisabled) return;
               if (selectedSlots.length === 0) {
-                console.log('First selection:', t);
                 const newSelection = [t];
                 setSelectedSlots(newSelection);
                 onSelect(newSelection);
               } else if (selectedSlots.length === 1) {
                 const firstSlotIdx = slots.indexOf(selectedSlots[0]);
-                console.log('Second selection. First was at:', firstSlotIdx, 'Second at:', idx);
                 if (firstSlotIdx === idx) {
                   // Same slot clicked again - do nothing or reset
                   return;
                 }
                 const range = createRange(firstSlotIdx, idx);
-                console.log('Created range:', range);
                 // Check if any slot in the range is already booked or lapsed
                 const hasBookedOrLapsedSlot = range.some(s => {
                   const booked = bookedTimes.includes(s);
                   const hour = parseInt(s.split(":")[0], 10);
                   const minute = parseInt(s.split(":")[1], 10);
-                  const date = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hour, minute);
-                  return booked || date < now;
+                  const date = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate(), hour, minute);
+                  return booked || (isToday && date < now);
                 });
                 if (hasBookedOrLapsedSlot) {
-                  console.log('Range contains booked/lapsed slots, ignoring');
                   return;
                 }
-                console.log('Setting selection to:', range);
                 setSelectedSlots(range);
                 onSelect(range);
               } else {
                 // Reset to single slot
-                console.log('Reset to single selection:', t);
                 const newSelection = [t];
                 setSelectedSlots(newSelection);
                 onSelect(newSelection);

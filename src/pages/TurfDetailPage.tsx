@@ -153,6 +153,7 @@ export default function TurfDetailPage() {
               <TimeSlotPicker
                 operatingHours={turf.operatingHours}
                 bookedTimes={bookedTimes}
+                selectedDate={date}
                 onSelect={slots => setSelectedSlots(Array.isArray(slots) ? slots : [slots])}
               />
               {duration > 0 && (
