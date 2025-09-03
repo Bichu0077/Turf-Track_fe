@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Helmet } from "react-helmet-async";
 import { useNavigate } from "react-router-dom";
 import { useForm } from "react-hook-form";
@@ -7,6 +7,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
+import { apiRequest } from "@/lib/auth";
 
 const schema = z.object({
   name: z.string().min(2),
@@ -21,8 +22,41 @@ type FormData = z.infer<typeof schema>;
 export default function RegisterPage() {
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { register, handleSubmit, formState: { errors } } = useForm<FormData>({ resolver: zodResolver(schema) });
+  const { register, handleSubmit, watch, formState: { errors } } = useForm<FormData>({ resolver: zodResolver(schema) });
   const [submitting, setSubmitting] = useState(false);
+  const [emailAvailable, setEmailAvailable] = useState<null | boolean>(null);
+  const [checkingEmail, setCheckingEmail] = useState(false);
+  const emailValue = watch("email");
+
+  // Basic debounce
+  const debouncedEmail = useMemo(() => emailValue, [emailValue]);
+
+  useEffect(() => {
+    if (!debouncedEmail || errors.email) {
+      setEmailAvailable(null);
+      return;
+    }
+    let ignore = false;
+    const ctrl = new AbortController();
+    const timeout = setTimeout(async () => {
+      try {
+        setCheckingEmail(true);
+        const q = encodeURIComponent(debouncedEmail.trim());
+        const res = await fetch(`/api/auth/email-available?email=${q}`, { signal: ctrl.signal });
+        const data = await res.json().catch(() => ({}));
+        if (!ignore) setEmailAvailable(Boolean(data?.available));
+      } catch {
+        if (!ignore) setEmailAvailable(null);
+      } finally {
+        if (!ignore) setCheckingEmail(false);
+      }
+    }, 400);
+    return () => {
+      ignore = true;
+      ctrl.abort();
+      clearTimeout(timeout);
+    };
+  }, [debouncedEmail, errors.email]);
 
   async function onSubmit(values: FormData) {
     setSubmitting(true);
@@ -74,8 +108,27 @@ export default function RegisterPage() {
 
           <div>
             <label className="mb-1 block text-sm font-medium">Email</label>
-            <Input {...register("email")} />
+            <div className="relative">
+              <Input {...register("email")} className={
+                emailAvailable === true ? "pr-9 border-green-500" : emailAvailable === false ? "pr-9 border-red-500" : undefined
+              } />
+              {checkingEmail && (
+                <span className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">…</span>
+              )}
+              {!checkingEmail && emailAvailable === true && (
+                <span className="absolute right-2 top-1/2 -translate-y-1/2 text-green-600" aria-label="email available">✔</span>
+              )}
+              {!checkingEmail && emailAvailable === false && (
+                <span className="absolute right-2 top-1/2 -translate-y-1/2 text-red-600" aria-label="email taken">✖</span>
+              )}
+            </div>
             {errors.email && <p className="text-sm text-destructive mt-1">{errors.email.message}</p>}
+            {emailAvailable === false && !errors.email && (
+              <p className="text-sm text-red-600 mt-1">Account is already registered</p>
+            )}
+            {emailAvailable === true && !errors.email && (
+              <p className="text-sm text-green-600 mt-1">Email is valid</p>
+            )}
           </div>
 
           <div>
