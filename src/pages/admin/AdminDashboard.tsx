@@ -1,28 +1,42 @@
 import { Helmet } from "react-helmet-async";
 import AdminSidebar from "@/components/layout/AdminSidebar";
 import { useEffect, useState } from "react";
+import { apiRequest } from "@/lib/auth";
 import { useAuth } from "@/hooks/useAuth";
+import { getAllBookings } from "@/hooks/useBooking";
+import type { Booking, Turf } from "@/types";
 
 
 export default function AdminDashboard() {
-  const { token } = useAuth();
   const [activeTurfs, setActiveTurfs] = useState<number | null>(null);
+  const [bookings, setBookings] = useState<Booking[]>([]);
+  const [loading, setLoading] = useState(true);
+  const { user } = useAuth();
 
   useEffect(() => {
-    async function fetchTurfs() {
+    async function fetchData() {
+      setLoading(true);
       try {
-        const res = await fetch("/api/turfs/mine", {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (!res.ok) throw new Error("Failed to fetch turfs");
-        const data = await res.json();
-        setActiveTurfs(Array.isArray(data.turfs) ? data.turfs.length : 0);
+        // Fetch turfs from DB
+        const turfsData = await apiRequest<{ turfs: Turf[] }>("/api/turfs/mine");
+        setActiveTurfs(Array.isArray(turfsData.turfs) ? turfsData.turfs.length : 0);
+        // Fetch bookings from DB
+        const allBookings: Booking[] = await getAllBookings();
+  // Support both id and _id for turf IDs
+  const myTurfIds = turfsData.turfs.map((t: Turf & {_id?: string}) => t.id || t._id);
+  const filtered = allBookings.filter(b => myTurfIds.includes(b.turfId));
+  setBookings(filtered);
       } catch {
         setActiveTurfs(0);
+        setBookings([]);
+      } finally {
+        setLoading(false);
       }
     }
-    if (token) fetchTurfs();
-  }, [token]);
+    fetchData();
+  }, [user]);
+
+  const totalRevenue = bookings.reduce((s, b) => s + (b.totalAmount || 0), 0);
 
   return (
     <main className="flex">
@@ -37,16 +51,16 @@ export default function AdminDashboard() {
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <div className="card-elevated p-4">
             <div className="text-sm text-muted-foreground">Total Bookings</div>
-            <div className="mt-2 text-2xl font-semibold">{JSON.parse(localStorage.getItem('bookings')||'[]').length}</div>
+            <div className="mt-2 text-2xl font-semibold">{loading ? "..." : bookings.length}</div>
           </div>
           <div className="card-elevated p-4">
             <div className="text-sm text-muted-foreground">Total Revenue</div>
-            <div className="mt-2 text-2xl font-semibold">₹{JSON.parse(localStorage.getItem('bookings')||'[]').reduce((s: number, b: any)=>s+b.totalAmount,0)}</div>
+              <div className="mt-2 text-2xl font-semibold">{loading ? "..." : totalRevenue}</div>
           </div>
           <div className="card-elevated p-4">
             <div className="text-sm text-muted-foreground">Active Turfs</div>
             <div className="mt-2 text-2xl font-semibold">
-              {activeTurfs === null ? "..." : activeTurfs}
+              {loading || activeTurfs === null ? "..." : activeTurfs}
             </div>
           </div>
         </div>

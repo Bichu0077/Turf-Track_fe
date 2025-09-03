@@ -1,3 +1,4 @@
+// ...existing code...
 import { Helmet } from "react-helmet-async";
 import { Input } from "@/components/ui/input";
 import { Slider } from "@/components/ui/slider";
@@ -6,7 +7,10 @@ import TurfCard from "@/components/turf/TurfCard";
 import { useEffect, useMemo, useState, useRef } from "react";
 import { apiRequest } from "@/lib/auth";
 import type { Turf } from "@/types";
-import GreenScreenBackground from "@/components/visual/GreenScreenBackground";
+import React from "react";
+import GreenScreenBackgroundOrig from "@/components/visual/GreenScreenBackground";
+
+const GreenScreenBackground = React.memo(GreenScreenBackgroundOrig);
 
 interface LocationSuggestion {
   display_name: string;
@@ -17,11 +21,13 @@ interface LocationSuggestion {
 
 const Index = () => {
   const [query, setQuery] = useState("");
-  const [price, setPrice] = useState<number[]>([600, 2000]);
+  const [price, setPrice] = useState<number[]>([500, 2000]);
+  const SLIDER_MIN = 500;
+  const SLIDER_MAX = 2000;
   const [turfs, setTurfs] = useState<Turf[]>([]);
   const [loading, setLoading] = useState(true);
   const turfsRef = useRef<HTMLDivElement>(null);
-  
+
   // Location search states
   const [locationQuery, setLocationQuery] = useState("");
   const [locationSuggestions, setLocationSuggestions] = useState<LocationSuggestion[]>([]);
@@ -93,7 +99,7 @@ const Index = () => {
     setShowSuggestions(false);
   };
 
-  // Fetch turfs, optionally filtered by location
+  // Fetch turfs with optional location filtering
   useEffect(() => {
     (async () => {
       setLoading(true);
@@ -103,10 +109,10 @@ const Index = () => {
       }
       try {
         const data = await apiRequest<{ turfs: any[] }>(url);
-        const mapped: Turf[] = (data.turfs || []).map((t: any) => ({
+        const mapped: Turf[] = (data.turfs || []).map((t) => ({
           id: t._id ?? t.id,
           name: t.name,
-          location: t.location ?? null,
+          location: t.location,
           description: t.description ?? "",
           images: Array.isArray(t.images) && t.images.length > 0 ? t.images : ["/placeholder.svg"],
           pricePerHour: Number(t.pricePerHour ?? 0),
@@ -128,15 +134,22 @@ const Index = () => {
       if (t.location && typeof t.location === "object" && t.location !== null && (t.location as any).address) {
         locationText = (t.location as any).address;
       } else if (t.location) {
-        locationText = t.location;
+        locationText = String(t.location);
       }
-      const matchQ = `${t.name} ${locationText} ${t.amenities.join(" ")}`
-        .toLowerCase()
-        .includes(query.toLowerCase());
+      
+      const matchQ = `${t.name} ${locationText} ${t.amenities.join(" ")}` // <-- use backticks here
+  .toLowerCase()
+  .includes(query.toLowerCase());
       const matchP = t.pricePerHour >= price[0] && t.pricePerHour <= price[1];
       return matchQ && matchP;
     });
   }, [turfs, query, price]);
+
+  // Memoize video sources for carousel
+  const bgSources = React.useMemo(() => [
+    { src: "/videos/ronaldhino_clip.mp4", fit: "cover" as const, scale: 1, dxPercent: 0, dyPercent: 0 },
+    { src: "/videos/messi_clip.mp4", fit: "cover" as const, scale: 1, dxPercent: 0, dyPercent: 0 },
+  ], []);
 
   return (
     <main className="relative overflow-hidden">
@@ -151,8 +164,7 @@ const Index = () => {
         })}</script>
       </Helmet>
 
-      {/* Background video (high quality) */}
-     
+      {/* Background effects */}
       <div className="absolute inset-0 -z-10 pixel-grid mix-blend-soft-light opacity-30 pointer-events-none" />
       <div className="absolute inset-0 -z-10 scanlines pointer-events-none" />
 
@@ -174,15 +186,17 @@ const Index = () => {
               <Button variant="premium">How it works</Button>
             </div>
           </div>
-          <div className="relative w-[300px] h-[600px] md:w-[800px] md:h-[460px] rounded-xl overflow-hidden ">
-            {/* Inline chroma-key video (high quality) */}
+          <div className="relative w-[300px] h-[600px] md:w-[800px] md:h-[460px] rounded-xl overflow-hidden">
+            {/* High quality video carousel */}
             <GreenScreenBackground
               className="absolute border-0 inset-2 md:inset-4 rounded-lg overflow-hidden"
               highQuality
               pixelSize={1}
               fps={30}
               disableOnMobile={false}
-              sources={["/videos/ronaldhino_clip.mp4"]}
+              carousel
+              carouselIntervalMs={7000}
+              sources={bgSources}
               edgeSmooth
               soften
             />
@@ -194,21 +208,20 @@ const Index = () => {
       {/* Filters */}
       <section className="section-soft border-t">
         <div className="container py-8">
-          <div className="grid gap-6 md:grid-cols-3 lg:gap-8">
+          <div className="grid gap-4 md:grid-cols-4">
             {/* Search Filter */}
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-foreground">Search</label>
+            <div>
+              <label className="mb-2 block text-sm font-medium">Search</label>
               <Input
                 placeholder="Search by name, location or amenity"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                className="h-11"
               />
             </div>
 
-            {/* Location Filter with Autocomplete */}
-            <div className="space-y-2 relative">
-              <label className="text-sm font-medium text-foreground">
+            {/* Location Filter */}
+            <div className="relative">
+              <label className="mb-2 block text-sm font-medium">
                 Location {selectedLocation && <span className="text-xs text-muted-foreground">(10km radius)</span>}
               </label>
               <div className="relative">
@@ -218,7 +231,6 @@ const Index = () => {
                   value={locationQuery}
                   onChange={(e) => setLocationQuery(e.target.value)}
                   onFocus={() => locationSuggestions.length > 0 && setShowSuggestions(true)}
-                  className="h-11"
                 />
                 {searchingLocations && (
                   <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
@@ -233,7 +245,7 @@ const Index = () => {
                     {locationSuggestions.map((suggestion) => (
                       <button
                         key={suggestion.place_id}
-                        className="w-full text-left px-3 py-2 hover:bg-accent hover:text-accent-foreground text-sm border-b border-border last:border-b-0 focus:bg-accent focus:text-accent-foreground focus:outline-none"
+                        className="w-full text-left px-3 py-2 hover:bg-accent hover:text-accent-foreground text-sm border-b border-border last:border-b-0"
                         onClick={() => handleLocationSelect(suggestion)}
                       >
                         <div className="truncate">
@@ -248,31 +260,35 @@ const Index = () => {
                 )}
               </div>
               {selectedLocation && (
-                <Button 
-                  variant="ghost" 
-                  size="sm" 
-                  onClick={clearLocation}
-                  className="h-8 text-xs"
-                >
+                <Button variant="ghost" size="sm" onClick={clearLocation} className="h-6 text-xs mt-1">
                   Clear location
                 </Button>
               )}
             </div>
 
             {/* Price Filter */}
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-foreground">
-                Price per hour (₹{price[0]} - ₹{price[1]})
-              </label>
-              <div className="pt-2">
-                <Slider 
-                  value={price} 
-                  min={500} 
-                  max={2500} 
-                  step={100} 
-                  onValueChange={setPrice}
-                  className="w-full"
-                />
+            <div className="md:col-span-2">
+              <label className="mb-2 block text-sm font-medium">Price</label>
+              <div className="flex items-center gap-2">
+                <div className="flex-1 flex flex-col items-center max-w-[400px] w-full">
+                  {/* Value labels above thumbs */}
+                  <div className="relative w-full flex justify-between mb-1" style={{height: '18px'}}>
+                    <span className="absolute left-0 text-xs font-semibold bg-white px-1 rounded shadow-sm" style={{transform: 'translateY(-8px)'}}>
+                      ₹{price[0]}
+                    </span>
+                    <span className="absolute right-0 text-xs font-semibold bg-white px-1 rounded shadow-sm" style={{transform: 'translateY(-8px)'}}>
+                      {price[1] === SLIDER_MAX ? `₹${SLIDER_MAX}+` : `₹${price[1]}`}
+                    </span>
+                  </div>
+                  <Slider
+                    value={price}
+                    min={SLIDER_MIN}
+                    max={SLIDER_MAX}
+                    step={50}
+                    onValueChange={([min, max]) => setPrice([Math.min(min, max), Math.max(min, max)])}
+                    className="h-1 w-56 max-w-full [&[role=slider]]:h-3 [&[role=slider]]:w-3 [&[role=slider]]:border-2 [&[role=slider]]:border-primary [&[role=slider]]:bg-primary [&[role=slider]]:shadow-sm"
+                  />
+                </div>
               </div>
             </div>
           </div>
@@ -283,7 +299,7 @@ const Index = () => {
       <section className="container py-10" ref={turfsRef}>
         <div className="mb-6">
           <h2 className="text-2xl font-bold">
-            {selectedLocation ? `Turfs near ${selectedLocation.address}` : 'All Turfs'} 
+           {selectedLocation ? `Turfs near ${selectedLocation.address}` : 'All Turfs'} 
             <span className="text-sm font-normal text-muted-foreground ml-2">
               ({filtered.length} found)
             </span>
@@ -300,11 +316,7 @@ const Index = () => {
             <div className="col-span-full text-center py-12">
               <p className="text-muted-foreground">No turfs found matching your criteria.</p>
               {selectedLocation && (
-                <Button 
-                  variant="outline" 
-                  onClick={clearLocation}
-                  className="mt-4"
-                >
+                <Button variant="outline" onClick={clearLocation} className="mt-4">
                   Clear location filter
                 </Button>
               )}

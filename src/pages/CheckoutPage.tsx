@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
 import { useEffect, useState } from "react";
+import { createBooking } from "@/hooks/useBooking";
 
 const schema = z.object({
   name: z.string().min(2),
@@ -17,12 +18,22 @@ const schema = z.object({
 
 type FormData = z.infer<typeof schema>;
 
+type CheckoutState = {
+  turfId: string;
+  turfName: string;
+  date: string; // yyyy-mm-dd
+  startTime: string;
+  endTime: string;
+  total: number;
+};
+
 export default function CheckoutPage() {
-  const { state } = useLocation() as { state?: any };
+  const { state } = useLocation() as { state?: CheckoutState };
   const navigate = useNavigate();
   const { user } = useAuth();
   const [useRegisteredEmail, setUseRegisteredEmail] = useState(false);
   const [useRegisteredPhone, setUseRegisteredPhone] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const { register, handleSubmit, setValue, formState: { errors } } = useForm<FormData>({ resolver: zodResolver(schema) });
 
   useEffect(() => {
@@ -50,9 +61,24 @@ export default function CheckoutPage() {
     );
   }
 
-  function onSubmit(values: FormData) {
-    // Simulate payment and booking confirmation
-    navigate("/profile");
+  async function onSubmit(values: FormData) {
+    if (!state) return;
+    setErrorMsg(null);
+    try {
+      const booking = await createBooking({
+        turfId: state.turfId,
+        date: state.date,
+        startTime: state.startTime,
+        endTime: state.endTime,
+        totalAmount: state.total,
+        userName: values.name,
+        userEmail: useRegisteredEmail && user?.email ? user.email : values.email,
+        userPhone: useRegisteredPhone && user?.phone ? user.phone : values.phone,
+      });
+      navigate("/profile");
+    } catch (e: any) {
+      setErrorMsg(e?.message || "Booking failed. Please try again.");
+    }
   }
 
   return (
@@ -70,6 +96,11 @@ export default function CheckoutPage() {
           <div className="flex justify-between"><span>Time</span><span>{state.startTime} - {state.endTime}</span></div>
           <div className="mt-2 flex justify-between font-medium"><span>Total</span><span>₹{state.total}</span></div>
         </div>
+        {errorMsg && (
+          <div className="mb-4 p-2 bg-red-100 text-red-700 rounded text-sm border border-red-300">
+            {errorMsg}
+          </div>
+        )}
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
           <div>
             <label className="mb-1 block text-sm font-medium">Name</label>

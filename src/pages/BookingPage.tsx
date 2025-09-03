@@ -9,6 +9,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { useToast } from "@/hooks/use-toast";
 import { formatCurrencyINR } from "@/lib/format";
 import type { Booking } from "@/types";
+import { createBooking } from "@/hooks/useBooking";
 import { useState } from "react";
 
 const schema = z.object({
@@ -19,8 +20,15 @@ const schema = z.object({
 
 type FormData = z.infer<typeof schema>;
 
+type BookingState = {
+  turfId: string;
+  turfName: string;
+  pricePerHour: number;
+  operatingHours?: { open: string; close: string };
+};
+
 export default function BookingPage() {
-  const { state } = useLocation() as { state?: any };
+  const { state } = useLocation() as { state?: BookingState };
   const navigate = useNavigate();
   const { toast } = useToast();
   const { register, handleSubmit, formState: { errors } } = useForm<FormData>({ resolver: zodResolver(schema) });
@@ -47,34 +55,29 @@ export default function BookingPage() {
   const duration = startTime && endTime ? parseInt(endTime) - parseInt(startTime) : 0;
   const total = duration > 0 ? state.pricePerHour * duration : 0;
 
-  function onSubmit(values: FormData) {
+  async function onSubmit(values: FormData) {
     if (!selectedDate || !startTime || !endTime) {
       toast({ title: 'Please select date, start time, and end time.' });
       return;
     }
-    // Simulate successful payment and booking creation
-    const booking: Booking = {
-      id: crypto.randomUUID(),
-      turfId: state.turfId,
-      turfName: state.turfName,
-      userName: values.name,
-      userEmail: values.email,
-      userPhone: values.phone,
-      bookingDate: selectedDate.toISOString().slice(0, 10),
-      startTime,
-      endTime,
-      totalAmount: total,
-      paymentStatus: 'completed',
-      bookingStatus: 'confirmed',
-      createdAt: new Date().toISOString(),
-    };
-
-    const existing = JSON.parse(localStorage.getItem('bookings') || '[]');
-    existing.unshift(booking);
-    localStorage.setItem('bookings', JSON.stringify(existing));
-
-    toast({ title: 'Booking confirmed', description: `${state.turfName} on ${booking.bookingDate} from ${startTime} to ${endTime}` });
-    navigate('/profile');
+    try {
+      const dateStr = selectedDate.toISOString().slice(0, 10);
+      const booking = await createBooking({
+        turfId: state.turfId,
+        date: dateStr,
+        startTime,
+        endTime,
+        totalAmount: total,
+        userName: values.name,
+        userEmail: values.email,
+        userPhone: values.phone,
+      });
+      toast({ title: 'Booking confirmed', description: `${state.turfName} on ${booking.bookingDate} from ${startTime} to ${endTime}` });
+      navigate('/profile');
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Failed to create booking';
+      toast({ title: 'Booking failed', description: msg });
+    }
   }
 
   return (

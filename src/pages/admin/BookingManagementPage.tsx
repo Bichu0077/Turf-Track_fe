@@ -3,10 +3,15 @@ import AdminSidebar from "@/components/layout/AdminSidebar";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import type { Booking } from "@/types";
-import { useState } from "react";
+import type { Turf } from "@/types";
+import { useAuth } from "@/hooks/useAuth";
+import { useEffect, useState } from "react";
+import { getAllBookings } from "@/hooks/useBooking";
+import { apiRequest } from "@/lib/auth";
 
 export default function BookingManagementPage() {
-  const bookings: Booking[] = JSON.parse(localStorage.getItem('bookings') || '[]');
+  const [bookings, setBookings] = useState<Booking[]>([]);
+  const { user } = useAuth();
   const [selected, setSelected] = useState<Booking | null>(null);
   const [open, setOpen] = useState(false);
 
@@ -14,6 +19,23 @@ export default function BookingManagementPage() {
     setSelected(booking);
     setOpen(true);
   };
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const allBookings = await getAllBookings();
+        // Fetch turfs created by this admin
+  const turfsRes = await apiRequest<{ turfs: Turf[] }>("/api/turfs/mine");
+  // Support both id and _id for turf IDs
+  const myTurfIds = turfsRes.turfs.map((t: Turf & {_id?: string}) => t.id || t._id);
+  // Only show bookings for turfs created by this admin
+  const filtered = allBookings.filter(b => myTurfIds.includes(b.turfId));
+  setBookings(filtered);
+      } catch (e) {
+        // ignore
+      }
+    })();
+  }, [user]);
 
   return (
     <main className="flex">
