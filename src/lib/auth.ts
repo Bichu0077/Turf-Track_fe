@@ -6,6 +6,11 @@ export interface AuthUser {
   role: 'user' | 'admin';
   location?: string;
   company?: string;
+  createdAt?: string;
+  memberSince?: string;
+  lastLoginAt?: string;
+  avatar?: string;
+  profile_pic?: string;
 }
 
 export interface AuthState {
