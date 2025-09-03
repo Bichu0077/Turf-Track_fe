@@ -1,10 +1,11 @@
 import { Helmet } from "react-helmet-async";
 import { useParams, useNavigate } from "react-router-dom";
-// import TimeSlotPicker from "@/components/turf/TimeSlotPicker";
+import TimeSlotPicker from "@/components/turf/TimeSlotPicker";
 import { Calendar } from "@/components/ui/calendar";
 import { Button } from "@/components/ui/button";
 import { useEffect, useState } from "react";
 import { format, setHours, setMinutes, isBefore, isSameDay } from "date-fns";
+import { getTurfAvailability } from "@/hooks/useBooking";
 import { apiRequest } from "@/lib/auth";
 import type { Turf } from "@/types";
 
@@ -15,6 +16,7 @@ export default function TurfDetailPage() {
   const [loading, setLoading] = useState(true);
   const [date, setDate] = useState<Date | undefined>(new Date());
   const [selectedSlots, setSelectedSlots] = useState<string[]>([]);
+  const [bookedTimes, setBookedTimes] = useState<string[]>([]);
 
   useEffect(() => {
     (async () => {
@@ -41,6 +43,20 @@ export default function TurfDetailPage() {
     })();
   }, [id]);
 
+  // Fetch unavailable slots when turf and date are selected
+  useEffect(() => {
+    async function fetchBookedTimes() {
+      if (!turf || !date) return;
+      try {
+        const booked = await getTurfAvailability(turf.id, format(date, 'yyyy-MM-dd'));
+        setBookedTimes(booked);
+      } catch {
+        setBookedTimes([]);
+      }
+    }
+    fetchBookedTimes();
+  }, [turf, date]);
+
   if (loading) {
     return (
       <main className="container py-16">
@@ -61,7 +77,8 @@ export default function TurfDetailPage() {
   const openHour = turf.operatingHours.open ? parseInt(turf.operatingHours.open.split(":")[0]) : 6;
   const closeHour = turf.operatingHours.close ? parseInt(turf.operatingHours.close.split(":")[0]) : 22;
   const hours = Array.from({length: closeHour - openHour}, (_, i) => `${(openHour + i).toString().padStart(2, '0')}:00`);
-  // New selection logic: one-click for single slot, two-click for range
+
+  // Multi-slot selection logic
   let startTime = "";
   let endTime = "";
   let duration = 0;
@@ -71,12 +88,13 @@ export default function TurfDetailPage() {
     duration = 1;
     endTime = (s + 1).toString().padStart(2, '0') + ":00";
   } else if (selectedSlots.length > 1) {
-    const sorted = selectedSlots.map(t => parseInt(t)).sort((a, b) => a - b);
-    const s = sorted[0];
-    const e = sorted[sorted.length - 1] + 1;
-    startTime = s.toString().padStart(2, '0') + ":00";
-    endTime = e.toString().padStart(2, '0') + ":00";
-    duration = e - s;
+    // Find the earliest and latest slot
+    const slotIdxs = selectedSlots.map(s => hours.indexOf(s)).sort((a, b) => a - b);
+    const s = slotIdxs[0];
+    const e = slotIdxs[selectedSlots.length - 1];
+    startTime = hours[s];
+    endTime = hours[e + 1] || ((parseInt(hours[e]) + 1).toString().padStart(2, '0') + ":00");
+    duration = e - s + 1;
   }
   const total = duration > 0 ? turf.pricePerHour * duration : 0;
 
@@ -132,61 +150,11 @@ export default function TurfDetailPage() {
             </div>
             <div>
               <h2 className="mb-3 text-sm font-semibold">Select time slot</h2>
-              <div className="flex flex-wrap gap-2">
-                {hours.map((h, idx) => {
-                  const hourNum = parseInt(h);
-                  const nextHour = (hourNum + 1).toString().padStart(2, '0') + ":00";
-                  // Disable if slot is in the past (today and before now)
-                  let isPast = false;
-                  if (isToday) {
-                    const slotDate = setMinutes(setHours(date, hourNum), 0);
-                    isPast = isBefore(slotDate, now);
-                  }
-                  let isSelected = false;
-                  if (selectedSlots.length === 1) {
-                    isSelected = selectedSlots[0] === h;
-                  } else if (selectedSlots.length > 1) {
-                    const sorted = selectedSlots.map(t => parseInt(t)).sort((a, b) => a - b);
-                    const s = sorted[0];
-                    const e = sorted[sorted.length - 1];
-                    isSelected = hourNum >= s && hourNum < e + 1;
-                  }
-                  return (
-                    <button
-                      type="button"
-                      key={h}
-                      data-time={h}
-                      className={
-                        isSelected
-                          ? 'bg-primary text-white border-primary border rounded px-4 py-2 font-semibold'
-                          : isPast
-                          ? 'bg-gray-200 text-gray-400 border border-gray-200 rounded px-4 py-2 cursor-not-allowed'
-                          : 'bg-white text-primary border border-primary rounded px-4 py-2 hover:bg-primary hover:text-white transition'
-                      }
-                      disabled={isPast}
-                      onClick={() => {
-                        if (isPast) return;
-                        if (selectedSlots.length === 0) {
-                          setSelectedSlots([h]);
-                        } else if (selectedSlots.length === 1) {
-                          if (selectedSlots[0] === h) {
-                            // Deselect
-                            setSelectedSlots([]);
-                          } else {
-                            // Range: always from earliest to latest
-                            setSelectedSlots([selectedSlots[0], h]);
-                          }
-                        } else {
-                          // Any further click resets selection to new single slot
-                          setSelectedSlots([h]);
-                        }
-                      }}
-                    >
-                      {format12HourRange(h, nextHour)}
-                    </button>
-                  );
-                })}
-              </div>
+              <TimeSlotPicker
+                operatingHours={turf.operatingHours}
+                bookedTimes={bookedTimes}
+                onSelect={slots => setSelectedSlots(Array.isArray(slots) ? slots : [slots])}
+              />
               {duration > 0 && (
                 <div className="mt-2 text-primary font-semibold">Total: ₹{total}</div>
               )}

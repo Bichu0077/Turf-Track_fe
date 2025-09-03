@@ -3,8 +3,11 @@ import { Button } from "@/components/ui/button";
 import { formatCurrencyINR } from "@/lib/format";
 import { jsPDF } from "jspdf";
 import { useAuth } from "@/hooks/useAuth";
+import { useEffect, useState } from "react";
+import { getMyBookings } from "@/hooks/useBooking";
+import type { Booking } from "@/types";
 
-function downloadReceipt(booking: any) {
+function downloadReceipt(booking: Booking) {
   const doc = new jsPDF();
   doc.setFontSize(16);
   doc.text("TMS Booking Receipt", 20, 20);
@@ -20,7 +23,18 @@ function downloadReceipt(booking: any) {
 
 export default function UserBookingsPage() {
   const { user } = useAuth();
-  const bookings = (JSON.parse(localStorage.getItem('bookings') || '[]') as any[]).filter(b => b.userEmail === user?.email);
+  const [bookings, setBookings] = useState<Booking[]>([]);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const data = await getMyBookings();
+        setBookings(data);
+      } catch (e) {
+        // ignore
+      }
+    })();
+  }, []);
 
   return (
     <main className="container py-12 max-w-2xl mx-auto">
