@@ -1,7 +1,10 @@
 import { Helmet } from "react-helmet-async";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
-import { useState, useRef } from "react";
+import axios from "axios";
+import { useState, useRef, useEffect } from "react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -45,8 +48,61 @@ export default function ProfilePage() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showActivity, setShowActivity] = useState(false);
+  const [activities, setActivities] = useState<any[]>([]);
+  const [activityLoading, setActivityLoading] = useState(false);
+  const [activityError, setActivityError] = useState<string | null>(null);
+  const [imageUploading, setImageUploading] = useState(false);
+  const [imageInfo, setImageInfo] = useState<{ originalSize?: string; compressedSize?: string }>({});
+
+  // Change Password modal state
+  const [showChangePassword, setShowChangePassword] = useState(false);
+  const [passwordForm, setPasswordForm] = useState({
+    currentPassword: '',
+    newPassword: '',
+    confirmPassword: ''
+  });
+  const [passwordError, setPasswordError] = useState<string | null>(null);
+  const [passwordSuccess, setPasswordSuccess] = useState<string | null>(null);
+  const [passwordLoading, setPasswordLoading] = useState(false);
+
+  const handlePasswordChange = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setPasswordError(null);
+    setPasswordSuccess(null);
+    if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+      setPasswordError('New passwords do not match.');
+      return;
+    }
+    setPasswordLoading(true);
+    try {
+      const res = await axios.post(
+        process.env.REACT_APP_API_URL ? `${process.env.REACT_APP_API_URL}/api/auth/change-password` : '/api/auth/change-password',
+        {
+          currentPassword: passwordForm.currentPassword,
+          newPassword: passwordForm.newPassword
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
+        }
+      );
+      setPasswordSuccess('Password changed successfully!');
+      setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
+      setTimeout(() => setShowChangePassword(false), 1200);
+    } catch (err) {
+      const msg = err?.response?.data?.message || 'Failed to change password.';
+      setPasswordError(msg);
+    } finally {
+      setPasswordLoading(false);
+    }
+  };
 
   if (!user) return null;
+
+  // Debug: Log user data to see what's available
+  console.log('ProfilePage user data:', user);
 
   const clearMessages = () => {
     setError(null);
@@ -76,6 +132,21 @@ export default function ProfilePage() {
       if (!response.ok) {
         throw new Error(`Failed to update profile: ${response.statusText}`);
       }
+      
+      const result = await response.json();
+      
+      // Update form state with the returned profile data to ensure consistency
+      if (result.profile) {
+        setForm({
+          name: result.profile.name || "",
+          email: result.profile.email || "",
+          phone: result.profile.phone || "",
+          location: result.profile.location || "",
+          company: result.profile.company || "",
+          avatar: result.profile.avatar || result.profile.profile_pic || ""
+        });
+      }
+      
       await refreshMe();
       setEditing(false);
       setSuccess("Profile updated successfully!");
@@ -112,22 +183,99 @@ export default function ProfilePage() {
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (file.size > 5 * 1024 * 1024) {
-      setError("Image size must be less than 5MB");
-      return;
-    }
+    
+    // Check file type
     if (!file.type.startsWith("image/")) {
       setError("Please select a valid image file");
       return;
     }
+    
+    // Check file size (5MB limit)
+    if (file.size > 5 * 1024 * 1024) {
+      setError("Image size must be less than 5MB");
+      return;
+    }
+    
     clearMessages();
+    setImageUploading(true);
+    
+    // Create canvas for image compression
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    const img = new Image();
+    
+    img.onload = () => {
+      try {
+        // Calculate new dimensions (max 300x300 for profile pics)
+        const maxSize = 300;
+        let { width, height } = img;
+        
+        if (width > height) {
+          if (width > maxSize) {
+            height = (height * maxSize) / width;
+            width = maxSize;
+          }
+        } else {
+          if (height > maxSize) {
+            width = (width * maxSize) / height;
+            height = maxSize;
+          }
+        }
+        
+        // Set canvas dimensions
+        canvas.width = width;
+        canvas.height = height;
+        
+        // Draw and compress image
+        ctx?.drawImage(img, 0, 0, width, height);
+        
+        // Convert to compressed data URL (JPEG with 0.8 quality)
+        const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.8);
+        
+        // Check if compressed size is still too large
+        const compressedSize = Math.ceil((compressedDataUrl.length * 3) / 4);
+        if (compressedSize > 500 * 1024) { // 500KB limit for compressed
+          setError("Image is still too large after compression. Please try a smaller image.");
+          return;
+        }
+        
+        // Update image info for display
+        const formatSize = (bytes: number) => {
+          if (bytes < 1024) return `${bytes} B`;
+          if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+          return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+        };
+        
+        setImageInfo({
+          originalSize: formatSize(file.size),
+          compressedSize: formatSize(compressedSize)
+        });
+        
+        setForm(f => ({ ...f, avatar: compressedDataUrl }));
+        setSuccess("Profile image updated successfully!");
+        // Keep image info visible for a few seconds then clear
+        setTimeout(() => setImageInfo({}), 5000);
+      } catch (error) {
+        setError("Failed to process image. Please try again.");
+        setImageInfo({});
+      } finally {
+        setImageUploading(false);
+      }
+    };
+    
+    img.onerror = () => {
+      setError("Failed to load image file");
+      setImageUploading(false);
+    };
+    
+    // Load image from file
     const reader = new FileReader();
     reader.onload = () => {
-      setForm(f => ({ ...f, avatar: reader.result as string }));
-      setSuccess("Profile image updated successfully!");
+      img.src = reader.result as string;
     };
     reader.onerror = () => {
       setError("Failed to read image file");
+      setImageUploading(false);
     };
     reader.readAsDataURL(file);
   };
@@ -143,7 +291,41 @@ export default function ProfilePage() {
     });
     setEditing(false);
     clearMessages();
+    setImageInfo({});
   };
+
+  // Update form when user data changes (e.g., after refreshMe)
+  useEffect(() => {
+    if (user) {
+      setForm({
+        name: user.name || "",
+        email: user.email || "",
+        phone: user.phone || "",
+        location: user.location || "",
+        company: user.company || "",
+        avatar: user.avatar || user.profile_pic || ""
+      });
+    }
+  }, [user]);
+
+  async function loadActivities() {
+    setActivityError(null);
+    setActivityLoading(true);
+    try {
+      const response = await fetch(`/api/auth/activity?limit=50`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (!response.ok) throw new Error(await response.text());
+      const data = await response.json();
+      setActivities(Array.isArray(data.activities) ? data.activities : []);
+      setShowActivity(true);
+    } catch (e: any) {
+      setActivityError(e?.message || 'Failed to load activity');
+      setShowActivity(true);
+    } finally {
+      setActivityLoading(false);
+    }
+  }
 
   const getRoleConfig = (role: string) => {
     switch (role) {
@@ -182,9 +364,14 @@ export default function ProfilePage() {
               {editing && (
                 <button
                   onClick={() => fileInputRef.current?.click()}
-                  className="absolute -bottom-1 -right-1 bg-green-600 hover:bg-green-700 text-white rounded-full p-2 shadow-lg transition-colors"
+                  disabled={imageUploading}
+                  className="absolute -bottom-1 -right-1 bg-green-600 hover:bg-green-700 text-white rounded-full p-2 shadow-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  <Camera className="h-4 w-4" />
+                  {imageUploading ? (
+                    <div className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <Camera className="h-4 w-4" />
+                  )}
                 </button>
               )}
             </div>
@@ -277,6 +464,20 @@ export default function ProfilePage() {
                     className="hidden"
                     onChange={handleImageUpload}
                   />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Recommended: JPEG/PNG under 5MB. Images will be automatically compressed to 300x300px.
+                  </p>
+                  {imageUploading && (
+                    <div className="flex items-center space-x-2 text-sm text-blue-600 mt-2">
+                      <div className="h-3 w-3 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+                      <span>Processing image...</span>
+                    </div>
+                  )}
+                  {imageInfo.originalSize && imageInfo.compressedSize && (
+                    <div className="text-xs text-gray-600 mt-2 p-2 bg-gray-50 rounded">
+                      <span className="font-medium">Compression:</span> {imageInfo.originalSize} → {imageInfo.compressedSize}
+                    </div>
+                  )}
                   {editing ? (
                     <div className="space-y-6">
                       <div className="grid gap-6 md:grid-cols-2">
@@ -430,9 +631,62 @@ export default function ProfilePage() {
                         <h3 className="text-lg font-semibold text-gray-900">Password</h3>
                         <p className="text-gray-600 mt-1">Last updated 30 days ago</p>
                       </div>
-                      <Button variant="outline" className="border-green-200 text-green-700 hover:bg-green-50">
+                      <Button
+                        variant="outline"
+                        className="border-green-200 text-green-700 hover:bg-green-50"
+                        onClick={() => setShowChangePassword(true)}
+                      >
                         Change Password
                       </Button>
+            {/* Change Password Modal */}
+            <Dialog open={showChangePassword} onOpenChange={setShowChangePassword}>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Change Password</DialogTitle>
+                </DialogHeader>
+                <form onSubmit={handlePasswordChange} className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Current Password</label>
+                    <Input
+                      type="password"
+                      value={passwordForm.currentPassword}
+                      onChange={e => setPasswordForm(f => ({ ...f, currentPassword: e.target.value }))}
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-1">New Password</label>
+                    <Input
+                      type="password"
+                      value={passwordForm.newPassword}
+                      onChange={e => setPasswordForm(f => ({ ...f, newPassword: e.target.value }))}
+                      minLength={6}
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Confirm New Password</label>
+                    <Input
+                      type="password"
+                      value={passwordForm.confirmPassword}
+                      onChange={e => setPasswordForm(f => ({ ...f, confirmPassword: e.target.value }))}
+                      minLength={6}
+                      required
+                    />
+                  </div>
+                  {passwordError && <div className="text-red-600 text-sm">{passwordError}</div>}
+                  {passwordSuccess && <div className="text-green-600 text-sm">{passwordSuccess}</div>}
+                  <DialogFooter>
+                    <Button type="button" variant="outline" onClick={() => setShowChangePassword(false)} disabled={passwordLoading}>
+                      Cancel
+                    </Button>
+                    <Button type="submit" className="bg-green-600 text-white" disabled={passwordLoading}>
+                      {passwordLoading ? 'Changing...' : 'Change Password'}
+                    </Button>
+                  </DialogFooter>
+                </form>
+              </DialogContent>
+            </Dialog>
                     </div>
                     <div className="flex items-center justify-between p-6 bg-gray-50 rounded-lg">
                       <div>
@@ -503,7 +757,20 @@ export default function ProfilePage() {
               <CardContent className="space-y-4">
                 <div className="flex items-center justify-between py-3 border-b border-gray-100">
                   <span className="text-gray-600">Member Since</span>
-                  <span className="font-medium text-gray-900">{new Date().toLocaleDateString()}</span>
+                  <span className="font-medium text-gray-900">
+                    {(() => {
+                      try {
+                        const dateStr = user.memberSince || user.createdAt;
+                        if (!dateStr) return 'N/A';
+                        const date = new Date(dateStr);
+                        if (isNaN(date.getTime())) return 'N/A';
+                        return date.toLocaleDateString();
+                        } catch (error) {
+                        console.error('Error formatting member since date:', error);
+                        return 'N/A';
+                      }
+                    })()}
+                  </span>
                 </div>
                 <div className="flex items-center justify-between py-3 border-b border-gray-100">
                   <span className="text-gray-600">Account Type</span>
@@ -515,7 +782,19 @@ export default function ProfilePage() {
                 </div>
                 <div className="flex items-center justify-between py-3">
                   <span className="text-gray-600">Last Login</span>
-                  <span className="font-medium text-gray-900">{new Date().toLocaleDateString()}</span>
+                  <span className="font-medium text-gray-900">
+                    {(() => {
+                      try {
+                        if (!user.lastLoginAt) return 'Today';
+                        const date = new Date(user.lastLoginAt);
+                        if (isNaN(date.getTime())) return 'Today';
+                        return date.toLocaleDateString();
+                      } catch (error) {
+                        console.error('Error formatting last login date:', error);
+                        return 'Today';
+                      }
+                    })()}
+                  </span>
                 </div>
               </CardContent>
             </Card>
@@ -528,7 +807,7 @@ export default function ProfilePage() {
                   <Settings className="h-4 w-4 mr-2" />
                   Account Settings
                 </Button>
-                <Button variant="outline" className="w-full justify-start">
+                <Button variant="outline" className="w-full justify-start" onClick={loadActivities}>
                   <Calendar className="h-4 w-4 mr-2" />
                   View Activity
                 </Button>
@@ -584,6 +863,60 @@ export default function ProfilePage() {
           </div>
         )}
       </main>
+      {/* Activity Modal */}
+      <Dialog open={showActivity} onOpenChange={setShowActivity}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Recent Activity</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 max-h-[60vh] overflow-auto">
+            {activityLoading && <div className="text-sm text-gray-600">Loading activity...</div>}
+            {activityError && (
+              <Alert className="border-red-200 bg-red-50">
+                <AlertCircle className="h-4 w-4 text-red-600" />
+                <AlertDescription className="text-red-700">{activityError}</AlertDescription>
+              </Alert>
+            )}
+            {!activityLoading && !activityError && activities.length === 0 && (
+              <div className="text-sm text-gray-600">No recent activity.</div>
+            )}
+            {!activityLoading && activities.map((a) => (
+              <div key={a.id} className="p-3 border border-gray-200 rounded-lg">
+                <div className="flex items-center justify-between">
+                  <div className="text-sm font-medium text-gray-900">{a.message}</div>
+                  <div className="text-xs text-gray-500">{new Date(a.createdAt).toLocaleString()}</div>
+                </div>
+                {a.type === 'profile_update' && a.details?.changed && (
+                  <div className="mt-2 text-xs text-gray-700">
+                    {Object.entries(a.details.changed).map(([field, diff]: any) => (
+                      <div key={field} className="grid grid-cols-3 gap-2 py-1">
+                        <div className="text-gray-500">{field}</div>
+                        <div className="truncate" title={String(diff.from ?? '')}>{String(diff.from ?? '')}</div>
+                        <div className="truncate" title={String(diff.to ?? '')}>{String(diff.to ?? '')}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {a.type === 'email_update' && (
+                  <div className="mt-2 text-xs text-gray-700">
+                    <div className="grid grid-cols-3 gap-2 py-1">
+                      <div className="text-gray-500">email</div>
+                      <div className="truncate" title={String(a.details?.from ?? '')}>{String(a.details?.from ?? '')}</div>
+                      <div className="truncate" title={String(a.details?.to ?? '')}>{String(a.details?.to ?? '')}</div>
+                    </div>
+                  </div>
+                )}
+                {a.type === 'password_change' && (
+                  <div className="mt-2 text-xs text-gray-500">Password updated</div>
+                )}
+              </div>
+            ))}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowActivity(false)}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
