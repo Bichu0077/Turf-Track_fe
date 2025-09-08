@@ -7,18 +7,83 @@ import { useEffect, useState } from "react";
 import { getMyBookings } from "@/hooks/useBooking";
 import type { Booking } from "@/types";
 
+// TurfTrack green: #16a34a
+// To embed your logo, convert logo.png to base64 PNG (data:image/png;base64,...) and paste below:
+const TURFTRACK_LOGO = "/logo.png"; // <-- Paste your PNG base64 string here
+
+function formatINRForPDF(n: number) {
+  // Format as INR 1,600 (no ₹ symbol)
+  return 'INR ' + n.toLocaleString('en-IN', { maximumFractionDigits: 0 });
+}
+
 function downloadReceipt(booking: Booking) {
   const doc = new jsPDF();
+  // Header bar
+  doc.setFillColor(22, 163, 74); // #16a34a
+  doc.rect(0, 0, 210, 30, 'F');
+  // Logo (if available)
+  if (TURFTRACK_LOGO) {
+    doc.addImage(TURFTRACK_LOGO, 'PNG', 12, 7, 16, 16);
+  } else {
+    // Placeholder circle logo
+    doc.setFillColor(255,255,255);
+    doc.circle(20, 15, 8, 'F');
+    doc.setTextColor(22, 163, 74);
+    doc.setFontSize(14);
+    doc.text('TT', 16.5, 19);
+  }
+  // TurfTrack name
+  doc.setTextColor(255,255,255);
+  doc.setFontSize(20);
+  doc.text('TurfTrack', 40, 19);
+
+  // Receipt title
   doc.setFontSize(16);
-  doc.text("TMS Booking Receipt", 20, 20);
+  doc.setTextColor(22, 163, 74);
+  doc.text('Booking Receipt', 20, 42);
+
+  // Details
   doc.setFontSize(12);
-  doc.text(`Booking ID: ${booking.id}`, 20, 32);
-  doc.text(`Turf: ${booking.turfName}`, 20, 40);
-  doc.text(`Date: ${booking.bookingDate}`, 20, 48);
-  doc.text(`Time: ${booking.startTime} - ${booking.endTime}`, 20, 56);
-  doc.text(`Amount: ${formatCurrencyINR(booking.totalAmount)}`, 20, 64);
-  doc.text(`Status: ${booking.bookingStatus} • Payment: ${booking.paymentStatus}`, 20, 72);
-  doc.save(`TMS-Receipt-${booking.id}.pdf`);
+  doc.setTextColor(0,0,0);
+  let y = 52;
+  doc.setFont(undefined, 'bold');
+  doc.text('Booking ID:', 20, y);
+  doc.setFont(undefined, 'normal');
+  doc.text(`${booking.id}`, 60, y);
+  y += 8;
+  doc.setFont(undefined, 'bold');
+  doc.text('Turf:', 20, y);
+  doc.setFont(undefined, 'normal');
+  doc.text(`${booking.turfName}`, 60, y);
+  y += 8;
+  doc.setFont(undefined, 'bold');
+  doc.text('Date:', 20, y);
+  doc.setFont(undefined, 'normal');
+  doc.text(`${booking.bookingDate}`, 60, y);
+  y += 8;
+  doc.setFont(undefined, 'bold');
+  doc.text('Time:', 20, y);
+  doc.setFont(undefined, 'normal');
+  doc.text(`${booking.startTime} - ${booking.endTime}`, 60, y);
+  y += 8;
+  doc.setFont(undefined, 'bold');
+  doc.text('Amount:', 20, y);
+  doc.setFont(undefined, 'normal');
+  doc.setTextColor(22, 163, 74);
+  doc.text(`${formatINRForPDF(booking.totalAmount)}`, 60, y);
+  doc.setTextColor(0,0,0);
+  y += 8;
+  doc.setFont(undefined, 'bold');
+  doc.text('Status:', 20, y);
+  doc.setFont(undefined, 'normal');
+  doc.text(`${booking.bookingStatus} • Payment: ${booking.paymentStatus}`, 60, y);
+
+  // Footer
+  doc.setFontSize(10);
+  doc.setTextColor(120, 120, 120);
+  doc.text('Thank you for booking with TurfTrack!', 20, 120);
+
+  doc.save(`TurfTrack-Receipt-${booking.id}.pdf`);
 }
 
 export default function UserBookingsPage() {
