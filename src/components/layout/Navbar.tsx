@@ -48,7 +48,7 @@ export default function Navbar() {
             <>
               <Link to="/profile" className="flex items-center">
                 <Avatar>
-                  <AvatarImage src={localStorage.getItem("profile_avatar") || undefined} alt={user?.name} />
+                  <AvatarImage src={user?.avatar || user?.profile_pic} alt={user?.name} />
                   <AvatarFallback>{user?.name?.[0]}</AvatarFallback>
                 </Avatar>
               </Link>
