@@ -1,5 +1,5 @@
 import { Helmet } from "react-helmet-async";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -53,6 +53,14 @@ export default function LoginPage() {
             {errors.password && <p className="text-sm text-destructive mt-1">{errors.password.message}</p>}
           </div>
           <Button type="submit" variant="hero" className="w-full">Login</Button>
+          <div className="text-center">
+            <Link 
+              to="/forgot-password" 
+              className="text-sm text-muted-foreground hover:text-primary underline"
+            >
+              Forgot your password?
+            </Link>
+          </div>
         </form>
       </div>
     </main>

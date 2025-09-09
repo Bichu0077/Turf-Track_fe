@@ -7,6 +7,10 @@ interface AuthContextValue extends AuthState {
   registerStart: (name: string, email: string, phone: string, password: string, role?: 'user' | 'admin') => Promise<{ transactionId: string; email: string; devCode?: string }>;
   verifyRegistration: (transactionId: string, code: string) => Promise<void>;
   resendRegistrationOtp: (transactionId: string) => Promise<{ devCode?: string }>;
+  forgotPassword: (email: string) => Promise<{ transactionId: string; email: string; devCode?: string }>;
+  verifyForgotPasswordOtp: (transactionId: string, code: string) => Promise<{ resetToken: string; email: string }>;
+  resetPassword: (resetToken: string, newPassword: string) => Promise<void>;
+  resendForgotPasswordOtp: (transactionId: string) => Promise<{ devCode?: string }>;
   logout: () => void;
   refreshMe: () => Promise<void>;
 }
@@ -93,6 +97,37 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return { devCode: (data as any).devCode };
   }
 
+  async function forgotPassword(email: string) {
+    const data = await apiRequest<{ transactionId: string; email: string; expiresInSeconds: number; devCode?: string }>('/api/auth/forgot-password', {
+      method: 'POST',
+      body: JSON.stringify({ email })
+    });
+    return { transactionId: data.transactionId, email: data.email, devCode: (data as any).devCode };
+  }
+
+  async function verifyForgotPasswordOtp(transactionId: string, code: string) {
+    const data = await apiRequest<{ resetToken: string; email: string; expiresInSeconds: number }>('/api/auth/forgot-password/verify', {
+      method: 'POST',
+      body: JSON.stringify({ transactionId, code })
+    });
+    return { resetToken: data.resetToken, email: data.email };
+  }
+
+  async function resetPassword(resetToken: string, newPassword: string) {
+    await apiRequest<{ message: string }>('/api/auth/reset-password', {
+      method: 'POST',
+      body: JSON.stringify({ resetToken, newPassword })
+    });
+  }
+
+  async function resendForgotPasswordOtp(transactionId: string) {
+    const data = await apiRequest<{ expiresInSeconds: number; devCode?: string }>('/api/auth/forgot-password/resend', {
+      method: 'POST',
+      body: JSON.stringify({ transactionId })
+    });
+    return { devCode: (data as any).devCode };
+  }
+
   function logout() {
     setState({ token: null, user: null });
     clearAuth();
@@ -104,7 +139,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setState((s) => ({ ...s, user: data.user }));
   }
 
-  const value = useMemo<AuthContextValue>(() => ({ ...state, login, register, registerStart, verifyRegistration, resendRegistrationOtp, logout, refreshMe }), [state]);
+  const value = useMemo<AuthContextValue>(() => ({ 
+    ...state, 
+    login, 
+    register, 
+    registerStart, 
+    verifyRegistration, 
+    resendRegistrationOtp, 
+    forgotPassword,
+    verifyForgotPasswordOtp,
+    resetPassword,
+    resendForgotPasswordOtp,
+    logout, 
+    refreshMe 
+  }), [state]);
 
   if (!initialized) return null;
 
