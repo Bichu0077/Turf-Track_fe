@@ -31,9 +31,17 @@ export default function RegisterPage() {
   // Basic debounce
   const debouncedEmail = useMemo(() => emailValue, [emailValue]);
 
+  // Validate email format live (independent of submit-time RHF validation)
+  const emailFormatOk = useMemo(() => {
+    const value = (debouncedEmail || '').trim();
+    if (!value) return false;
+    return z.string().email().safeParse(value).success;
+  }, [debouncedEmail]);
+
   useEffect(() => {
-    if (!debouncedEmail || errors.email) {
+    if (!debouncedEmail || !emailFormatOk) {
       setEmailAvailable(null);
+      setCheckingEmail(false);
       return;
     }
     let ignore = false;
@@ -56,7 +64,7 @@ export default function RegisterPage() {
       ctrl.abort();
       clearTimeout(timeout);
     };
-  }, [debouncedEmail, errors.email]);
+  }, [debouncedEmail, emailFormatOk]);
 
   async function onSubmit(values: FormData) {
     setSubmitting(true);
@@ -110,23 +118,27 @@ export default function RegisterPage() {
             <label className="mb-1 block text-sm font-medium">Email</label>
             <div className="relative">
               <Input {...register("email")} className={
-                emailAvailable === true ? "pr-9 border-green-500" : emailAvailable === false ? "pr-9 border-red-500" : undefined
+                debouncedEmail && !emailFormatOk ? "pr-9 border-red-500" :
+                emailAvailable === true ? "pr-9 border-green-500" :
+                emailAvailable === false ? "pr-9 border-red-500" : undefined
               } />
               {checkingEmail && (
                 <span className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">…</span>
               )}
-              {!checkingEmail && emailAvailable === true && (
+              {!checkingEmail && emailFormatOk && emailAvailable === true && (
                 <span className="absolute right-2 top-1/2 -translate-y-1/2 text-green-600" aria-label="email available">✔</span>
               )}
-              {!checkingEmail && emailAvailable === false && (
+              {!checkingEmail && (!emailFormatOk || emailAvailable === false) && (
                 <span className="absolute right-2 top-1/2 -translate-y-1/2 text-red-600" aria-label="email taken">✖</span>
               )}
             </div>
-            {errors.email && <p className="text-sm text-destructive mt-1">{errors.email.message}</p>}
-            {emailAvailable === false && !errors.email && (
+            {debouncedEmail && !emailFormatOk && (
+              <p className="text-sm text-red-600 mt-1">Incorrect email format</p>
+            )}
+            {emailAvailable === false && emailFormatOk && (
               <p className="text-sm text-red-600 mt-1">Account is already registered</p>
             )}
-            {emailAvailable === true && !errors.email && (
+            {emailAvailable === true && emailFormatOk && (
               <p className="text-sm text-green-600 mt-1">Email is valid</p>
             )}
           </div>

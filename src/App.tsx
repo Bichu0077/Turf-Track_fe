@@ -12,6 +12,9 @@ import BookingPage from "./pages/BookingPage";
 import LoginPage from "./pages/LoginPage";
 import RegisterPage from "./pages/RegisterPage";
 import OtpVerifyPage from "./pages/OtpVerifyPage";
+import ForgotPasswordPage from "./pages/ForgotPasswordPage";
+import ForgotPasswordOtpPage from "./pages/ForgotPasswordOtpPage";
+import ResetPasswordPage from "./pages/ResetPasswordPage";
 import ProfilePage from "./pages/ProfilePage";
 import UserBookingsPage from "./pages/UserBookingsPage";
 import AdminDashboard from "./pages/admin/AdminDashboard";
@@ -46,6 +49,9 @@ const App = () => (
               <Route path="/login" element={<LoginPage />} />
               <Route path="/register" element={<RegisterPage />} />
               <Route path="/verify-otp" element={<OtpVerifyPage />} />
+              <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+              <Route path="/forgot-password/verify" element={<ForgotPasswordOtpPage />} />
+              <Route path="/reset-password" element={<ResetPasswordPage />} />
               <Route path="/checkout" element={<CheckoutPage />} />
 
               <Route element={<ProtectedRoute roles={["user", "admin"]} />}>
