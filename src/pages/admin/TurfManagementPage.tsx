@@ -2,7 +2,27 @@ import { Helmet } from "react-helmet-async";
 import AdminSidebar from "@/components/layout/AdminSidebar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { useEffect, useState, useRef } from "react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
+import { 
+  MapPin, 
+  Clock, 
+  DollarSign, 
+  Settings, 
+  Eye, 
+  Edit, 
+  Trash2, 
+  Plus,
+  Search,
+  Star,
+  Users,
+  Calendar,
+  Image as ImageIcon,
+  Activity
+} from "lucide-react";
+import { useEffect, useState, useRef, useMemo } from "react";
 import { apiRequest } from "@/lib/auth";
 
 // Declare Leaflet on window for TypeScript
@@ -39,6 +59,11 @@ export default function TurfManagementPage() {
   const [showForm, setShowForm] = useState(false);
   const [editingTurf, setEditingTurf] = useState<Turf | null>(null);
   
+  // New states for enhanced UI
+  const [viewTurf, setViewTurf] = useState<Turf | null>(null);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
+  
   // Form states
   const [name, setName] = useState("");
   const [location, setLocation] = useState("");
@@ -47,7 +72,8 @@ export default function TurfManagementPage() {
   const [open, setOpen] = useState("06:00");
   const [close, setClose] = useState("22:00");
   const [amenities, setAmenities] = useState("");
-  const [image, setImage] = useState("");
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string>("");
   
   // Map states
   const mapRef = useRef<HTMLDivElement>(null);
@@ -204,7 +230,12 @@ export default function TurfManagementPage() {
     setOpen("06:00");
     setClose("22:00");
     setAmenities("");
-    setImage("");
+    setImageFile(null);
+    // Clean up blob URL if it exists
+    if (imagePreview && imagePreview.startsWith('blob:')) {
+      URL.revokeObjectURL(imagePreview);
+    }
+    setImagePreview("");
     setEditingTurf(null);
     // Remove marker and reset map view
     if (mapInstanceRef.current) {
@@ -230,7 +261,9 @@ export default function TurfManagementPage() {
     setOpen(turf.operatingHours.open);
     setClose(turf.operatingHours.close);
     setAmenities(Array.isArray(turf.amenities) ? turf.amenities.join(', ') : '');
-    setImage(turf.images?.[0] || '');
+    // For existing turfs, show the current image as preview (URL-based)
+    setImageFile(null);
+    setImagePreview(turf.images?.[0] || '');
     setEditingTurf(turf);
     // If map is loaded and ref exists, show marker at turf location
     if (mapLoaded && mapInstanceRef.current && selectedCoords) {
@@ -259,12 +292,60 @@ export default function TurfManagementPage() {
     fetchMine();
   }, []);
 
+  // Cleanup image preview URL on component unmount or when image changes
+  useEffect(() => {
+    return () => {
+      if (imagePreview && imagePreview.startsWith('blob:')) {
+        URL.revokeObjectURL(imagePreview);
+      }
+    };
+  }, [imagePreview]);
+
+  // Get location display text - moved here to be available for useMemo hooks
+  const getLocationDisplay = (turfLocation: string | TurfLocation): string => {
+    if (typeof turfLocation === 'string') {
+      return turfLocation;
+    }
+    return turfLocation.address;
+  };
+
+  // Filter turfs based on search
+  const filteredTurfs = useMemo(() => {
+    return turfs.filter(turf => {
+      const locationText = getLocationDisplay(turf.location);
+      const amenitiesText = Array.isArray(turf.amenities) ? turf.amenities.join(' ') : '';
+      
+      return (
+        turf.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        locationText.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        amenitiesText.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+    });
+  }, [turfs, searchTerm]);
+
+  // Statistics
+  const stats = useMemo(() => {
+    const totalTurfs = turfs.length;
+    const avgPrice = turfs.length > 0 ? turfs.reduce((sum, turf) => sum + turf.pricePerHour, 0) / turfs.length : 0;
+    const mostExpensive = turfs.length > 0 ? Math.max(...turfs.map(t => t.pricePerHour)) : 0;
+    const cheapest = turfs.length > 0 ? Math.min(...turfs.map(t => t.pricePerHour)) : 0;
+    
+    return { totalTurfs, avgPrice, mostExpensive, cheapest };
+  }, [turfs]);
+
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!name || !location || !pricePerHour) return;
     
     setLoading(true);
     try {
+      let imageUrl = '';
+      
+      // Use base64 image data if available
+      if (imagePreview) {
+        imageUrl = imagePreview; // This is already base64 data URL
+      }
+      
       const payload = {
         name,
         location: selectedCoords ? {
@@ -273,7 +354,7 @@ export default function TurfManagementPage() {
           longitude: selectedCoords.lng
         } : location, // Fallback to string if no coordinates
         description: "",
-        images: image ? [image] : [],
+        images: imageUrl ? [imageUrl] : [],
         pricePerHour: Number(pricePerHour),
         operatingHours: { open, close },
         amenities: amenities
@@ -329,36 +410,246 @@ export default function TurfManagementPage() {
     setShowForm(!showForm);
   };
 
-  // Get location display text
-  const getLocationDisplay = (turfLocation: string | TurfLocation): string => {
-    if (typeof turfLocation === 'string') {
-      return turfLocation;
+  // Handle image file selection and convert to base64
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      // Validate file type
+      if (!file.type.includes('jpeg') && !file.type.includes('jpg')) {
+        alert('Please select a JPG file only');
+        return;
+      }
+      
+      // Validate file size (limit to 5MB)
+      if (file.size > 5 * 1024 * 1024) {
+        alert('File size should be less than 5MB');
+        return;
+      }
+      
+      // Convert to base64
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const base64String = event.target?.result as string;
+        setImageFile(file);
+        setImagePreview(base64String); // This will be the base64 data URL
+      };
+      reader.onerror = () => {
+        alert('Error reading file');
+      };
+      reader.readAsDataURL(file);
     }
-    return turfLocation.address;
   };
+
+  // No upload function needed - we store base64 directly in the database
+
+  // Helper component for turf cards
+  const TurfCard = ({ turf }: { turf: Turf }) => (
+    <Card className="group hover:shadow-lg transition-shadow">
+      <CardHeader className="pb-3">
+        <div className="flex items-start justify-between">
+          <div>
+            <CardTitle className="text-lg">{turf.name}</CardTitle>
+            <div className="flex items-center gap-1 text-sm text-muted-foreground mt-1">
+              <MapPin className="w-4 h-4" />
+              <span className="truncate max-w-[200px]" title={getLocationDisplay(turf.location)}>
+                {getLocationDisplay(turf.location)}
+              </span>
+            </div>
+          </div>
+          <Badge variant="secondary" className="text-lg font-semibold">
+            ₹{turf.pricePerHour}/hr
+          </Badge>
+        </div>
+      </CardHeader>
+      
+      <CardContent className="space-y-4">
+        {/* Turf Image */}
+        <div className="aspect-video bg-muted rounded-lg overflow-hidden">
+          {turf.images?.[0] ? (
+            <img 
+              src={turf.images[0]} 
+              alt={turf.name}
+              className="w-full h-full object-cover"
+            />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center">
+              <ImageIcon className="w-12 h-12 text-muted-foreground" />
+            </div>
+          )}
+        </div>
+        
+        {/* Operating Hours */}
+        <div className="flex items-center gap-2 text-sm">
+          <Clock className="w-4 h-4 text-muted-foreground" />
+          <span>{turf.operatingHours.open} - {turf.operatingHours.close}</span>
+        </div>
+        
+        {/* Amenities */}
+        <div className="space-y-2">
+          <div className="text-sm font-medium">Amenities:</div>
+          <div className="flex flex-wrap gap-1">
+            {Array.isArray(turf.amenities) && turf.amenities.slice(0, 3).map((amenity, index) => (
+              <Badge key={index} variant="outline" className="text-xs">
+                {amenity.trim()}
+              </Badge>
+            ))}
+            {Array.isArray(turf.amenities) && turf.amenities.length > 3 && (
+              <Badge variant="outline" className="text-xs">
+                +{turf.amenities.length - 3} more
+              </Badge>
+            )}
+          </div>
+        </div>
+        
+        {/* Action Buttons */}
+        <div className="flex gap-2 pt-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setViewTurf(turf)}
+            className="flex-1"
+          >
+            <Eye className="w-4 h-4 mr-1" />
+            View
+          </Button>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => handleEdit(turf)}
+            className="flex-1"
+          >
+            <Edit className="w-4 h-4 mr-1" />
+            Edit
+          </Button>
+          <Button
+            variant="destructive"
+            size="sm"
+            onClick={() => deleteTurf(turf._id)}
+            disabled={loading}
+          >
+            <Trash2 className="w-4 h-4" />
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
 
   return (
     <main className="flex">
       <AdminSidebar />
-      <section className="container py-8">
+      <section className="container py-8 space-y-6">
         <Helmet>
           <title>Manage Turfs</title>
           <meta name="description" content="Create, edit and delete turfs." />
           <link rel="canonical" href="/admin/turfs" />
         </Helmet>
         
-        <div className="mb-6 flex items-center justify-between">
-          <h1 className="text-2xl font-semibold">Turfs</h1>
-          <Button variant="hero" onClick={handleAddNew}>
-            {showForm ? "Close" : "Add Turf"}
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold">Turf Management</h1>
+            <p className="text-muted-foreground">Manage your turf facilities and settings</p>
+          </div>
+          <Button onClick={handleAddNew} className="flex items-center gap-2">
+            <Plus className="w-4 h-4" />
+            {showForm ? "Close Form" : "Add New Turf"}
           </Button>
         </div>
 
+        {/* Statistics Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium flex items-center gap-2">
+                <Activity className="w-4 h-4 text-blue-600" />
+                Total Turfs
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{stats.totalTurfs}</div>
+            </CardContent>
+          </Card>
+          
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium flex items-center gap-2">
+                <DollarSign className="w-4 h-4 text-green-600" />
+                Average Rate
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">₹{Math.round(stats.avgPrice)}</div>
+              <p className="text-xs text-muted-foreground">per hour</p>
+            </CardContent>
+          </Card>
+          
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium flex items-center gap-2">
+                <Star className="w-4 h-4 text-yellow-600" />
+                Highest Rate
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">₹{stats.mostExpensive}</div>
+              <p className="text-xs text-muted-foreground">per hour</p>
+            </CardContent>
+          </Card>
+          
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium flex items-center gap-2">
+                <DollarSign className="w-4 h-4 text-purple-600" />
+                Lowest Rate
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">₹{stats.cheapest}</div>
+              <p className="text-xs text-muted-foreground">per hour</p>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Search and Filters */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Search className="w-5 h-5" />
+              Search & Filter
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex gap-4 items-center">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
+                <Input
+                  placeholder="Search by name, location, or amenities..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-10"
+                />
+              </div>
+              <Button
+                variant="outline"
+                onClick={() => setSearchTerm("")}
+                disabled={!searchTerm}
+              >
+                Clear
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Add/Edit Turf Form */}
         {showForm && (
-          <div className="mb-6 rounded-lg border bg-white p-6">
-            <h2 className="mb-4 text-lg font-semibold">
-              {editingTurf ? "Edit Turf" : "Add New Turf"}
-            </h2>
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                {editingTurf ? <Edit className="w-5 h-5" /> : <Plus className="w-5 h-5" />}
+                {editingTurf ? "Edit Turf" : "Add New Turf"}
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
             
             <form onSubmit={onSubmit} className="grid gap-4 md:grid-cols-2">
               <div>
@@ -393,8 +684,26 @@ export default function TurfManagementPage() {
               </div>
               
               <div className="md:col-span-2">
-                <label className="mb-1 block text-sm font-medium">Image URL (optional)</label>
-                <Input placeholder="https://..." value={image} onChange={(e) => setImage(e.target.value)} />
+                <label className="mb-1 block text-sm font-medium">Turf Image (JPG only)</label>
+                <Input 
+                  type="file" 
+                  accept=".jpg,.jpeg,image/jpeg"
+                  onChange={handleImageChange}
+                  className="mb-2"
+                />
+                <p className="text-sm text-gray-500 mb-2">
+                  Upload a JPG image. Maximum size: 5MB. Image will be stored in the database.
+                </p>
+                {imagePreview && (
+                  <div className="mt-2">
+                    <p className="text-sm text-gray-600 mb-2">Image Preview:</p>
+                    <img 
+                      src={imagePreview} 
+                      alt="Turf preview" 
+                      className="h-32 w-48 object-cover rounded border"
+                    />
+                  </div>
+                )}
               </div>
               
               {/* Location Section */}
@@ -450,77 +759,184 @@ export default function TurfManagementPage() {
                 )}
               </div>
             </form>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Turfs Display */}
+        {loading ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {[1, 2, 3, 4, 5, 6].map((i) => (
+              <Card key={i} className="animate-pulse">
+                <CardHeader>
+                  <div className="h-4 bg-muted rounded w-3/4"></div>
+                  <div className="h-3 bg-muted rounded w-1/2"></div>
+                </CardHeader>
+                <CardContent>
+                  <div className="aspect-video bg-muted rounded mb-4"></div>
+                  <div className="space-y-2">
+                    <div className="h-3 bg-muted rounded w-full"></div>
+                    <div className="h-3 bg-muted rounded w-2/3"></div>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        ) : filteredTurfs.length === 0 ? (
+          <Card>
+            <CardContent className="flex flex-col items-center justify-center py-12">
+              <MapPin className="w-12 h-12 text-muted-foreground mb-4" />
+              <h3 className="text-lg font-medium mb-2">
+                {searchTerm ? "No matching turfs found" : "No turfs yet"}
+              </h3>
+              <p className="text-muted-foreground text-center mb-4">
+                {searchTerm 
+                  ? "Try adjusting your search terms"
+                  : "Create your first turf to get started with bookings"
+                }
+              </p>
+              {!searchTerm && (
+                <Button onClick={handleAddNew}>
+                  <Plus className="w-4 h-4 mr-2" />
+                  Add Your First Turf
+                </Button>
+              )}
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {filteredTurfs.map((turf) => (
+              <TurfCard key={turf._id} turf={turf} />
+            ))}
           </div>
         )}
 
-        <div className="overflow-x-auto rounded-xl border">
-          <table className="min-w-full text-sm">
-            <thead className="bg-secondary">
-              <tr>
-                <th className="p-3 text-left">Name</th>
-                <th className="p-3 text-left">Location</th>
-                <th className="p-3 text-left">Price/hr</th>
-                <th className="p-3 text-left">Hours</th>
-                <th className="p-3 text-left">Amenities</th>
-                <th className="p-3 text-left">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading && (
-                <tr><td className="p-3" colSpan={6}>Loading...</td></tr>
-              )}
-              {!loading && turfs.length === 0 && (
-                <tr><td className="p-3" colSpan={6}>No turfs yet. Use "Add Turf" to create your first one.</td></tr>
-              )}
-              {!loading && turfs.map((turf) => (
-                <tr key={turf._id} className="border-t">
-                  <td className="p-3 font-medium">{turf.name}</td>
-                  <td className="p-3">
-                    <div className="max-w-xs">
-                      <div className="truncate" title={getLocationDisplay(turf.location)}>
-                        {getLocationDisplay(turf.location)}
+        {/* Turf Details Modal */}
+        <Dialog open={!!viewTurf} onOpenChange={(open) => !open && setViewTurf(null)}>
+          <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-xl">
+                <MapPin className="w-5 h-5" />
+                {viewTurf?.name}
+              </DialogTitle>
+            </DialogHeader>
+            {viewTurf && (
+              <div className="space-y-6">
+                {/* Turf Image */}
+                <div className="aspect-video bg-muted rounded-lg overflow-hidden">
+                  {viewTurf.images?.[0] ? (
+                    <img 
+                      src={viewTurf.images[0]} 
+                      alt={viewTurf.name}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center">
+                      <ImageIcon className="w-16 h-16 text-muted-foreground" />
+                      <span className="ml-2 text-muted-foreground">No image available</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Basic Information */}
+                <div className="grid grid-cols-2 gap-4 p-4 border rounded-lg">
+                  <div>
+                    <label className="text-sm font-medium text-muted-foreground">Turf Name</label>
+                    <p className="font-medium text-lg">{viewTurf.name}</p>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-muted-foreground">Price per Hour</label>
+                    <p className="font-bold text-xl text-green-600">₹{viewTurf.pricePerHour}</p>
+                  </div>
+                </div>
+
+                {/* Location Information */}
+                <div className="space-y-3">
+                  <h3 className="text-lg font-semibold flex items-center gap-2">
+                    <MapPin className="w-5 h-5" />
+                    Location Details
+                  </h3>
+                  <div className="p-4 border rounded-lg space-y-2">
+                    <div>
+                      <label className="text-sm font-medium text-muted-foreground">Address</label>
+                      <p className="font-medium">{getLocationDisplay(viewTurf.location)}</p>
+                    </div>
+                    {typeof viewTurf.location === 'object' && (
+                      <div>
+                        <label className="text-sm font-medium text-muted-foreground">Coordinates</label>
+                        <p className="font-mono text-sm">
+                          {viewTurf.location.latitude.toFixed(6)}, {viewTurf.location.longitude.toFixed(6)}
+                        </p>
                       </div>
-                      {typeof turf.location === 'object' && (
-                        <div className="text-xs text-gray-500">
-                          {turf.location.latitude.toFixed(4)}, {turf.location.longitude.toFixed(4)}
-                        </div>
-                      )}
+                    )}
+                  </div>
+                </div>
+
+                {/* Operating Hours */}
+                <div className="space-y-3">
+                  <h3 className="text-lg font-semibold flex items-center gap-2">
+                    <Clock className="w-5 h-5" />
+                    Operating Hours
+                  </h3>
+                  <div className="p-4 border rounded-lg">
+                    <div className="flex items-center justify-between">
+                      <span className="font-medium">Daily Hours:</span>
+                      <Badge variant="outline" className="text-base px-3 py-1">
+                        {viewTurf.operatingHours.open} - {viewTurf.operatingHours.close}
+                      </Badge>
                     </div>
-                  </td>
-                  <td className="p-3">₹{turf.pricePerHour}</td>
-                  <td className="p-3">
-                    {turf.operatingHours.open} - {turf.operatingHours.close}
-                  </td>
-                  <td className="p-3">
-                    <div className="max-w-xs truncate">
-                      {Array.isArray(turf.amenities) ? turf.amenities.join(', ') : ''}
+                  </div>
+                </div>
+
+                {/* Amenities */}
+                <div className="space-y-3">
+                  <h3 className="text-lg font-semibold flex items-center gap-2">
+                    <Settings className="w-5 h-5" />
+                    Available Amenities
+                  </h3>
+                  <div className="p-4 border rounded-lg">
+                    {Array.isArray(viewTurf.amenities) && viewTurf.amenities.length > 0 ? (
+                      <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                        {viewTurf.amenities.map((amenity, index) => (
+                          <Badge key={index} variant="secondary" className="justify-center">
+                            {amenity.trim()}
+                          </Badge>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-muted-foreground text-center py-4">No amenities listed</p>
+                    )}
+                  </div>
+                </div>
+
+                <Separator />
+
+                {/* System Information */}
+                <div className="space-y-2">
+                  <h3 className="text-sm font-medium text-muted-foreground">System Information</h3>
+                  <div className="text-sm">
+                    <div>
+                      <span className="text-muted-foreground">Turf ID: </span>
+                      <span className="font-mono">{viewTurf._id}</span>
                     </div>
-                  </td>
-                  <td className="p-3">
-                    <div className="flex gap-2">
-                      <Button 
-                        variant="secondary" 
-                        size="sm"
-                        onClick={() => handleEdit(turf)}
-                        disabled={loading}
-                      >
-                        Edit
-                      </Button>
-                      <Button 
-                        variant="destructive" 
-                        size="sm"
-                        onClick={() => deleteTurf(turf._id)}
-                        disabled={loading}
-                      >
-                        Delete
-                      </Button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+                  </div>
+                </div>
+              </div>
+            )}
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setViewTurf(null)}>
+                Close
+              </Button>
+              <Button onClick={() => {
+                setViewTurf(null);
+                handleEdit(viewTurf!);
+              }}>
+                <Edit className="w-4 h-4 mr-2" />
+                Edit Turf
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </section>
     </main>
   );

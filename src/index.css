@@ -2,6 +2,9 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Import chart overflow fixes */
+@import './chart-fixes.css';
+
 /* Design System — all tokens in HSL, semantic-first */
 @layer base {
   :root {
