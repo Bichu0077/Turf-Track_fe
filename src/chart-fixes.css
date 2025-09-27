@@ -1,0 +1,54 @@
+/* Chart overflow fix styles */
+.recharts-responsive-container {
+  width: 100% !important;
+  max-width: 100% !important;
+  overflow: hidden !important;
+}
+
+.recharts-surface {
+  max-width: 100% !important;
+  overflow: visible !important;
+}
+
+/* Ensure chart containers don't exceed parent width */
+.chart-container {
+  width: 100%;
+  max-width: 100%;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+/* Fix for chart text overflow */
+.recharts-text {
+  font-size: 12px !important;
+}
+
+.recharts-cartesian-axis-tick-value {
+  font-size: 11px !important;
+}
+
+.recharts-tooltip-wrapper {
+  max-width: 250px !important;
+  word-wrap: break-word !important;
+}
+
+/* Card content padding adjustments for charts */
+.chart-card-content {
+  padding: 16px;
+  overflow: hidden;
+}
+
+/* Responsive chart heights */
+@media (max-width: 768px) {
+  .recharts-responsive-container {
+    height: 250px !important;
+  }
+  
+  .recharts-text {
+    font-size: 10px !important;
+  }
+  
+  .recharts-cartesian-axis-tick-value {
+    font-size: 9px !important;
+  }
+}

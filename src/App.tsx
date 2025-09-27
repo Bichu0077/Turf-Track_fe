@@ -20,7 +20,6 @@ import UserBookingsPage from "./pages/UserBookingsPage";
 import AdminDashboard from "./pages/admin/AdminDashboard";
 import TurfManagementPage from "./pages/admin/TurfManagementPage";
 import BookingManagementPage from "./pages/admin/BookingManagementPage";
-import ReportsPage from "./pages/admin/ReportsPage";
 import CheckoutPage from "./pages/CheckoutPage";
 import { AuthProvider } from "@/hooks/useAuth";
 import ProtectedRoute from "@/components/ProtectedRoute";
@@ -64,7 +63,6 @@ const App = () => (
                 <Route path="/admin" element={<AdminDashboard />} />
                 <Route path="/admin/turfs" element={<TurfManagementPage />} />
                 <Route path="/admin/bookings" element={<BookingManagementPage />} />
-                <Route path="/admin/reports" element={<ReportsPage />} />
               </Route>
 
               {/* Catch-all */}
