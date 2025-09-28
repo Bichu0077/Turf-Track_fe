@@ -45,7 +45,7 @@ export default function OtpVerifyPage() {
 
     setLoading(true);
     try {
-      const payload: any = { otp, email: pending.email };
+      const payload: Record<string, string> = { otp, email: pending.email };
       if (pending.transactionId) payload.transactionId = pending.transactionId;
 
       const res = await fetch("/api/auth/register/verify", {
@@ -73,7 +73,7 @@ export default function OtpVerifyPage() {
     if (!pending) return;
     setLoading(true);
     try {
-      const payload: any = { email: pending.email };
+      const payload: Record<string, string> = { email: pending.email };
       if (pending.transactionId) payload.transactionId = pending.transactionId;
 
       const res = await fetch("/api/auth/register/resend", {
