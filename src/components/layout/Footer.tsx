@@ -72,9 +72,21 @@ export default function Footer() {
               >
                 Shipping Policy
               </Link>
-              <Button variant="link" className="p-0 h-auto text-left justify-start text-muted-foreground hover:text-foreground">
+              <Link 
+                to="https://merchant.razorpay.com/policy/R79q4kLa6kKUWD/privacy" 
+                target="_blank"
+                className="block text-muted-foreground hover:text-foreground transition-colors"
+              >
                 Privacy Policy
-              </Button>
+              </Link>
+
+              <Link 
+                to="https://merchant.razorpay.com/policy/R79q4kLa6kKUWD/contact_us" 
+                target="_blank"
+                className="block text-muted-foreground hover:text-foreground transition-colors"
+              >
+                Contact Us
+              </Link>
             </div>
           </div>
         </div>
@@ -85,11 +97,6 @@ export default function Footer() {
         <div className="flex flex-col md:flex-row justify-between items-center gap-4">
           <div className="text-sm text-muted-foreground">
             © {currentYear} TurfTrack. All rights reserved.
-          </div>
-          <div className="flex items-center gap-4 text-sm text-muted-foreground">
-            <span>Powered by Razorpay</span>
-            <span>•</span>
-            <span>Made in India</span>
           </div>
         </div>
       </div>
