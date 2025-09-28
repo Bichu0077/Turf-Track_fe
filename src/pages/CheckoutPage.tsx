@@ -76,8 +76,8 @@ export default function CheckoutPage() {
         userPhone: useRegisteredPhone && user?.phone ? user.phone : values.phone,
       });
       navigate("/profile");
-    } catch (e: any) {
-      setErrorMsg(e?.message || "Booking failed. Please try again.");
+    } catch (e) {
+      setErrorMsg((e as Error)?.message || "Booking failed. Please try again.");
     }
   }
 
@@ -144,6 +144,21 @@ export default function CheckoutPage() {
               </div>
             )}
             {errors.phone && <p className="text-sm text-destructive mt-1">{errors.phone.message}</p>}
+          </div>
+          <div className="mt-4 p-3 bg-muted/30 rounded text-xs text-muted-foreground text-center">
+            By proceeding with payment, you agree to our{" "}
+            <Button variant="link" className="p-0 h-auto text-xs text-primary" onClick={() => window.open('/terms-conditions', '_blank')}>
+              Terms & Conditions
+            </Button>
+            {", "}
+            <Button variant="link" className="p-0 h-auto text-xs text-primary" onClick={() => window.open('/cancellation-refunds', '_blank')}>
+              Cancellation Policy
+            </Button>
+            {" and "}
+            <Button variant="link" className="p-0 h-auto text-xs text-primary" onClick={() => window.open('/shipping-policy', '_blank')}>
+              Shipping Policy
+            </Button>
+            .
           </div>
           <Button type="submit" variant="hero" className="w-full">Pay & Confirm</Button>
         </form>

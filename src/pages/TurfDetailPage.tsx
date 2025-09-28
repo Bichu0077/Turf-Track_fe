@@ -4,14 +4,18 @@ import TimeSlotPicker from "@/components/turf/TimeSlotPicker";
 import { Calendar } from "@/components/ui/calendar";
 import { Button } from "@/components/ui/button";
 import { useEffect, useState } from "react";
-import { format, setHours, setMinutes, isBefore, isSameDay } from "date-fns";
+import { format, setHours, setMinutes, isSameDay } from "date-fns";
 import { getTurfAvailability } from "@/hooks/useBooking";
 import { apiRequest } from "@/lib/auth";
+import { useAuth } from "@/hooks/useAuth";
+import { useToast } from "@/hooks/use-toast";
 import type { Turf } from "@/types";
 
 export default function TurfDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { token } = useAuth();
+  const { toast } = useToast();
   const [turf, setTurf] = useState<Turf | null>(null);
   const [loading, setLoading] = useState(true);
   const [date, setDate] = useState<Date | undefined>(new Date());
@@ -20,22 +24,43 @@ export default function TurfDetailPage() {
 
   useEffect(() => {
     (async () => {
-      if (!id) return;
+      if (!id) {
+        console.log("No turf ID provided");
+        return;
+      }
       try {
-        const data = await apiRequest<{ turf: any }>(`/api/turfs/${id}`);
+        console.log("Fetching turf with ID:", id);
+        const data = await apiRequest<{ turf: Record<string, unknown> }>(`/api/turfs/${id}`);
+        console.log("Received turf data:", data);
         const t = data.turf;
+        
+        // Handle location safely - could be string or object
+        let locationString = "";
+        if (typeof t.location === "string") {
+          locationString = t.location;
+        } else if (t.location && typeof t.location === "object" && 'address' in t.location) {
+          locationString = String((t.location as Record<string, unknown>).address);
+        } else if (t.location) {
+          locationString = String(t.location);
+        }
+        
         const mapped: Turf = {
-          id: t._id ?? t.id,
-          name: t.name,
-          location: t.location,
-          description: t.description ?? "",
-          images: Array.isArray(t.images) && t.images.length > 0 ? t.images : ["/placeholder.svg"],
-          pricePerHour: Number(t.pricePerHour ?? 0),
-          operatingHours: { open: t.operatingHours?.open ?? "06:00", close: t.operatingHours?.close ?? "22:00" },
-          amenities: Array.isArray(t.amenities) ? t.amenities : [],
+          id: String(t._id || t.id || ""),
+          name: String(t.name || ""),
+          location: locationString,
+          description: String(t.description || ""),
+          images: Array.isArray(t.images) && t.images.length > 0 ? t.images as string[] : ["/placeholder.svg"],
+          pricePerHour: Number(t.pricePerHour) || 0,
+          operatingHours: { 
+            open: String(((t.operatingHours as Record<string, unknown>)?.open) || "06:00"), 
+            close: String(((t.operatingHours as Record<string, unknown>)?.close) || "22:00") 
+          },
+          amenities: Array.isArray(t.amenities) ? t.amenities as string[] : [],
         };
+        console.log("Mapped turf data:", mapped);
         setTurf(mapped);
-      } catch {
+      } catch (error) {
+        console.error("Error fetching turf:", error);
         setTurf(null);
       } finally {
         setLoading(false);
@@ -57,6 +82,15 @@ export default function TurfDetailPage() {
     fetchBookedTimes();
   }, [turf, date]);
 
+  if (!id) {
+    return (
+      <main className="container py-16">
+        <h1 className="text-2xl font-semibold">Invalid turf ID</h1>
+        <p className="text-muted-foreground">No turf ID provided in URL.</p>
+      </main>
+    );
+  }
+
   if (loading) {
     return (
       <main className="container py-16">
@@ -69,6 +103,7 @@ export default function TurfDetailPage() {
     return (
       <main className="container py-16">
         <h1 className="text-2xl font-semibold">Turf not found</h1>
+        <p className="text-muted-foreground">Please check the URL and try again.</p>
       </main>
     );
   }
@@ -115,7 +150,7 @@ export default function TurfDetailPage() {
     <main className="container py-8">
       <Helmet>
         <title>{turf.name}</title>
-        <meta name="description" content={`Book ${turf.name} located at ${turf.location.address}. Available hourly slots and amenities.`} />
+        <meta name="description" content={`Book ${turf.name} located at ${turf.location}. Available hourly slots and amenities.`} />
         <link rel="canonical" href={`/turfs/${turf.id}`} />
         <script type="application/ld+json">{JSON.stringify({
           '@context': 'https://schema.org', '@type': 'Product', name: turf.name, description: turf.description, offers: { '@type': 'Offer', priceCurrency: 'INR', price: turf.pricePerHour }
@@ -134,7 +169,7 @@ export default function TurfDetailPage() {
         <div className="space-y-6">
           <div>
             <h1 className="text-3xl font-bold">{turf.name}</h1>
-            <p className="text-muted-foreground">{turf.location.address}</p>
+            <p className="text-muted-foreground">{turf.location}</p>
           </div>
           <p className="text-muted-foreground">{turf.description}</p>
 
@@ -168,6 +203,16 @@ export default function TurfDetailPage() {
               variant="hero"
               disabled={!date || !(startTime && endTime && duration > 0)}
               onClick={() => {
+                if (!token) {
+                  toast({
+                    title: 'Login Required',
+                    description: 'You must be logged in to make a booking.',
+                    variant: 'destructive'
+                  });
+                  navigate('/login');
+                  return;
+                }
+                
                 navigate("/checkout", {
                   state: {
                     turfId: turf.id,

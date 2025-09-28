@@ -53,13 +53,22 @@ export default function LoginPage() {
             {errors.password && <p className="text-sm text-destructive mt-1">{errors.password.message}</p>}
           </div>
           <Button type="submit" variant="hero" className="w-full">Login</Button>
-          <div className="text-center">
+          <div className="text-center space-y-2">
             <Link 
               to="/forgot-password" 
-              className="text-sm text-muted-foreground hover:text-primary underline"
+              className="text-sm text-muted-foreground hover:text-primary underline block"
             >
               Forgot your password?
             </Link>
+            <div className="text-sm">
+              Don't have an account?{" "}
+              <Link 
+                to="/register" 
+                className="text-primary hover:underline"
+              >
+                Sign up
+              </Link>
+            </div>
           </div>
         </form>
       </div>

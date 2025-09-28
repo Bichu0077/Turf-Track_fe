@@ -5,6 +5,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Navbar from "@/components/layout/Navbar";
+import Footer from "@/components/layout/Footer";
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 import TurfDetailPage from "./pages/TurfDetailPage";
@@ -21,6 +22,9 @@ import AdminDashboard from "./pages/admin/AdminDashboard";
 import TurfManagementPage from "./pages/admin/TurfManagementPage";
 import BookingManagementPage from "./pages/admin/BookingManagementPage";
 import CheckoutPage from "./pages/CheckoutPage";
+import ShippingPolicyPage from "./pages/ShippingPolicyPage";
+import TermsConditionsPage from "./pages/TermsConditionsPage";
+import CancellationRefundsPage from "./pages/CancellationRefundsPage";
 import { AuthProvider } from "@/hooks/useAuth";
 import ProtectedRoute from "@/components/ProtectedRoute";
 
@@ -43,15 +47,23 @@ const App = () => (
             <Routes>
               <Route path="/" element={<Index />} />
               <Route path="/turfs/:id" element={<TurfDetailPage />} />
-              <Route path="/booking" element={<BookingPage />} />
-
               <Route path="/login" element={<LoginPage />} />
               <Route path="/register" element={<RegisterPage />} />
               <Route path="/verify-otp" element={<OtpVerifyPage />} />
               <Route path="/forgot-password" element={<ForgotPasswordPage />} />
               <Route path="/forgot-password/verify" element={<ForgotPasswordOtpPage />} />
               <Route path="/reset-password" element={<ResetPasswordPage />} />
-              <Route path="/checkout" element={<CheckoutPage />} />
+
+              {/* Protected booking routes */}
+              <Route element={<ProtectedRoute roles={["user", "admin"]} />}>
+                <Route path="/booking" element={<BookingPage />} />
+                <Route path="/checkout" element={<CheckoutPage />} />
+              </Route>
+              
+              {/* Policy Pages */}
+              <Route path="/shipping-policy" element={<ShippingPolicyPage />} />
+              <Route path="/terms-conditions" element={<TermsConditionsPage />} />
+              <Route path="/cancellation-refunds" element={<CancellationRefundsPage />} />
 
               <Route element={<ProtectedRoute roles={["user", "admin"]} />}>
                 <Route path="/profile" element={<ProfilePage />} />
@@ -68,6 +80,7 @@ const App = () => (
               {/* Catch-all */}
               <Route path="*" element={<NotFound />} />
             </Routes>
+            <Footer />
           </AuthProvider>
         </BrowserRouter>
       </TooltipProvider>

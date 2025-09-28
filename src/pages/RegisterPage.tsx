@@ -167,6 +167,8 @@ export default function RegisterPage() {
           <Button type="submit" variant="hero" className="w-full" disabled={submitting}>
             {submitting ? "Sending OTP..." : "Create account"}
           </Button>
+          
+
         </form>
       </div>
     </main>
