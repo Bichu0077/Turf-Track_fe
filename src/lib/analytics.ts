@@ -28,7 +28,7 @@ export function calculateAnalytics(bookings: Booking[], selectedMonth?: Date): A
   
   const currentMonthBookings = bookings.filter(booking => {
     const bookingDate = parseISO(booking.bookingDate);
-    return isWithinInterval(bookingDate, { start: monthStart, end: monthEnd });
+    return isWithinInterval(bookingDate, { start: monthStart, end: monthEnd }) && booking.bookingStatus !== 'cancelled';
   });
   
   const previousMonthStart = startOfMonth(previousMonth);
@@ -36,12 +36,14 @@ export function calculateAnalytics(bookings: Booking[], selectedMonth?: Date): A
   
   const previousMonthBookings = bookings.filter(booking => {
     const bookingDate = parseISO(booking.bookingDate);
-    return isWithinInterval(bookingDate, { start: previousMonthStart, end: previousMonthEnd });
+    return isWithinInterval(bookingDate, { start: previousMonthStart, end: previousMonthEnd }) && booking.bookingStatus !== 'cancelled';
   });
 
   // Basic metrics
   const totalBookings = currentMonthBookings.length;
-  const totalRevenue = currentMonthBookings.reduce((sum, booking) => sum + booking.totalAmount, 0);
+  const totalRevenue = currentMonthBookings
+    .filter(booking => booking.paymentStatus === 'completed')
+    .reduce((sum, booking) => sum + booking.totalAmount, 0);
   const averageBookingValue = totalBookings > 0 ? totalRevenue / totalBookings : 0;
   
   // Monthly growth calculation
@@ -55,7 +57,10 @@ export function calculateAnalytics(bookings: Booking[], selectedMonth?: Date): A
       acc[turfName] = { bookings: 0, revenue: 0 };
     }
     acc[turfName].bookings += 1;
-    acc[turfName].revenue += booking.totalAmount;
+    // Only count revenue from completed payments
+    if (booking.paymentStatus === 'completed') {
+      acc[turfName].revenue += booking.totalAmount;
+    }
     return acc;
   }, {} as Record<string, { bookings: number; revenue: number }>);
 
@@ -78,7 +83,9 @@ export function calculateAnalytics(bookings: Booking[], selectedMonth?: Date): A
     return {
       date: format(day, 'MMM dd'),
       bookings: dayBookings.length,
-      revenue: dayBookings.reduce((sum, booking) => sum + booking.totalAmount, 0)
+      revenue: dayBookings
+        .filter(booking => booking.paymentStatus === 'completed')
+        .reduce((sum, booking) => sum + booking.totalAmount, 0)
     };
   });
 
@@ -90,13 +97,15 @@ export function calculateAnalytics(bookings: Booking[], selectedMonth?: Date): A
     
     const monthBookings = bookings.filter(booking => {
       const bookingDate = parseISO(booking.bookingDate);
-      return isWithinInterval(bookingDate, { start, end });
+      return isWithinInterval(bookingDate, { start, end }) && booking.bookingStatus !== 'cancelled';
     });
     
     return {
       month: format(monthDate, 'MMM yyyy'),
       bookings: monthBookings.length,
-      revenue: monthBookings.reduce((sum, booking) => sum + booking.totalAmount, 0)
+      revenue: monthBookings
+        .filter(booking => booking.paymentStatus === 'completed')
+        .reduce((sum, booking) => sum + booking.totalAmount, 0)
     };
   });
 
@@ -113,7 +122,9 @@ export function calculateAnalytics(bookings: Booking[], selectedMonth?: Date): A
     weeksInMonth.push({
       week: `Week ${format(currentWeek, 'MMM dd')}`,
       bookings: weekBookings.length,
-      revenue: weekBookings.reduce((sum, booking) => sum + booking.totalAmount, 0)
+      revenue: weekBookings
+        .filter(booking => booking.paymentStatus === 'completed')
+        .reduce((sum, booking) => sum + booking.totalAmount, 0)
     });
     
     currentWeek = new Date(currentWeek.getTime() + 7 * 24 * 60 * 60 * 1000);
@@ -121,10 +132,16 @@ export function calculateAnalytics(bookings: Booking[], selectedMonth?: Date): A
 
   // Hourly distribution
   const hourlyStats = currentMonthBookings.reduce((acc, booking) => {
-    const hour = parseInt(booking.startTime.split(':')[0]);
-    const hourKey = `${hour.toString().padStart(2, '0')}:00`;
-    acc[hourKey] = (acc[hourKey] || 0) + 1;
-    return acc;
+    try {
+      // Handle both HH:mm and HH:mm:ss time formats
+      const hour = parseInt(booking.startTime.split(':')[0]);
+      const hourKey = `${hour.toString().padStart(2, '0')}:00`;
+      acc[hourKey] = (acc[hourKey] || 0) + 1;
+      return acc;
+    } catch (error) {
+      console.error('Error parsing hour from booking time:', error);
+      return acc;
+    }
   }, {} as Record<string, number>);
 
   const hourlyDistribution = Array.from({ length: 24 }, (_, i) => {
@@ -135,8 +152,13 @@ export function calculateAnalytics(bookings: Booking[], selectedMonth?: Date): A
     };
   }).filter(item => item.bookings > 0);
 
-  // Booking status distribution
-  const statusStats = currentMonthBookings.reduce((acc, booking) => {
+  // Booking status distribution (including cancelled for complete picture)
+  const allMonthBookings = bookings.filter(booking => {
+    const bookingDate = parseISO(booking.bookingDate);
+    return isWithinInterval(bookingDate, { start: monthStart, end: monthEnd });
+  });
+  
+  const statusStats = allMonthBookings.reduce((acc, booking) => {
     acc[booking.bookingStatus] = (acc[booking.bookingStatus] || 0) + 1;
     return acc;
   }, {} as Record<string, number>);
@@ -144,10 +166,10 @@ export function calculateAnalytics(bookings: Booking[], selectedMonth?: Date): A
   const bookingStatusDistribution = Object.entries(statusStats).map(([status, count]) => ({
     status: status.charAt(0).toUpperCase() + status.slice(1),
     count,
-    percentage: (count / totalBookings) * 100
+    percentage: (count / allMonthBookings.length) * 100
   }));
 
-  // Payment status distribution
+  // Payment status distribution (exclude cancelled bookings)
   const paymentStats = currentMonthBookings.reduce((acc, booking) => {
     acc[booking.paymentStatus] = (acc[booking.paymentStatus] || 0) + 1;
     return acc;

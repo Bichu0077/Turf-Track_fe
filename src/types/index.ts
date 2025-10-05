@@ -25,7 +25,38 @@ export interface Booking {
   startTime: string; // "14:00"
   endTime: string;   // "15:00"
   totalAmount: number;
-  paymentStatus: 'pending' | 'completed' | 'failed';
-  bookingStatus: 'confirmed' | 'cancelled';
+  paymentStatus: 'pending' | 'completed' | 'failed' | 'refunded';
+  paymentMethod: 'cash' | 'online' | null;
+  bookingStatus: 'confirmed' | 'cancelled' | 'tentative';
+  razorpayOrderId?: string;
+  razorpayPaymentId?: string;
+  cancelledAt?: string;
+  cancellationReason?: string;
+  refundAmount?: number;
+  canCancel?: boolean;
   createdAt: string; // ISO datetime
+}
+
+export interface PaymentDetails {
+  orderId: string;
+  amount: number;
+  currency: string;
+  key: string;
+  name: string;
+  description: string;
+  image?: string;
+  prefill: {
+    name: string;
+    email: string;
+    contact: string;
+  };
+  theme: {
+    color: string;
+  };
+}
+
+export interface RazorpayResponse {
+  razorpay_payment_id: string;
+  razorpay_order_id: string;
+  razorpay_signature: string;
 }

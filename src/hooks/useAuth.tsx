@@ -42,12 +42,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         console.log('[Auth] Token before /api/auth/me:', state.token);
         try {
           const data = await apiRequest<{ user: AuthUser }>('/api/auth/me', {}, state.token);
+          console.log('[Auth] Successfully fetched user:', data.user);
           setState((s) => ({ ...s, user: data.user }));
         } catch (err) {
           console.error('[Auth] Error fetching /api/auth/me:', err);
+          console.log('[Auth] Clearing invalid auth');
           setState({ user: null, token: null });
           clearAuth();
         }
+      } else {
+        console.log('[Auth] No token found, user will need to login');
       }
       setInitialized(true);
     })();
@@ -154,7 +158,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     refreshMe 
   }), [state]);
 
-  if (!initialized) return null;
+  if (!initialized) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-green-500 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

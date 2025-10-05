@@ -107,16 +107,34 @@ export function BookingAnalytics({ bookings, onRefresh }: BookingAnalyticsProps)
   
   // Calculate analytics
   const analytics = useMemo(() => {
-    const total = filteredData.length;
+    // Filter out cancelled bookings from counts but keep them for analysis
+    const activeBookings = filteredData.filter(b => b.bookingStatus !== 'cancelled');
+    
+    const total = activeBookings.length; // Only count non-cancelled bookings
     const confirmed = filteredData.filter(b => b.bookingStatus === 'confirmed').length;
-    const pending = filteredData.filter(b => b.paymentStatus === 'pending').length;
+    const tentative = filteredData.filter(b => b.bookingStatus === 'tentative').length;
+    const pending = filteredData.filter(b => b.paymentStatus === 'pending' && b.bookingStatus !== 'cancelled').length;
     const cancelled = filteredData.filter(b => b.bookingStatus === 'cancelled').length;
     
-    const totalRevenue = filteredData
-      .filter(b => b.paymentStatus === 'completed')
+    // Revenue calculation - only from NON-CANCELLED bookings with completed payments
+    const confirmedRevenue = filteredData
+      .filter(b => b.bookingStatus === 'confirmed' && b.paymentStatus === 'completed')
       .reduce((sum, b) => sum + (b.totalAmount || 0), 0);
     
-    const avgBookingValue = total > 0 ? totalRevenue / total : 0;
+    // Tentative revenue - potential revenue from unconfirmed bookings (excluding cancelled)
+    const tentativeRevenue = filteredData
+      .filter(b => (b.bookingStatus === 'tentative' || (b.paymentStatus === 'pending' && b.bookingStatus !== 'cancelled')))
+      .reduce((sum, b) => sum + (b.totalAmount || 0), 0);
+    
+    // Lost revenue - revenue lost from cancelled bookings that had payments
+    const lostRevenue = filteredData
+      .filter(b => b.bookingStatus === 'cancelled' && (b.refundAmount || 0) > 0)
+      .reduce((sum, b) => sum + (b.refundAmount || b.totalAmount || 0), 0);
+    
+    const totalRevenue = confirmedRevenue; // Only confirmed revenue counts as actual revenue
+    const totalPotentialRevenue = confirmedRevenue + tentativeRevenue; // Including potential
+    
+    const avgBookingValue = total > 0 ? totalPotentialRevenue / total : 0;
     
     // Daily bookings chart data
     const now = new Date();
@@ -130,12 +148,21 @@ export function BookingAnalytics({ bookings, onRefresh }: BookingAnalyticsProps)
         format(new Date(b.bookingDate), 'yyyy-MM-dd') === format(day, 'yyyy-MM-dd')
       );
       
+      const confirmedDayRevenue = dayBookings
+        .filter(b => b.bookingStatus === 'confirmed' && b.paymentStatus === 'completed')
+        .reduce((sum, b) => sum + (b.totalAmount || 0), 0);
+      
+      const tentativeDayRevenue = dayBookings
+        .filter(b => (b.bookingStatus === 'tentative' || b.paymentStatus === 'pending') && b.bookingStatus !== 'cancelled')
+        .reduce((sum, b) => sum + (b.totalAmount || 0), 0);
+      
       return {
         date: format(day, 'MMM dd'),
-        bookings: dayBookings.length,
-        revenue: dayBookings
-          .filter(b => b.paymentStatus === 'completed')
-          .reduce((sum, b) => sum + (b.totalAmount || 0), 0)
+        bookings: dayBookings.filter(b => b.bookingStatus !== 'cancelled').length, // Exclude cancelled from count
+        confirmedRevenue: confirmedDayRevenue,
+        tentativeRevenue: tentativeDayRevenue,
+        revenue: confirmedDayRevenue, // Only confirmed revenue for main chart
+        totalPotential: confirmedDayRevenue + tentativeDayRevenue
       };
     });
     
@@ -156,38 +183,51 @@ export function BookingAnalytics({ bookings, onRefresh }: BookingAnalyticsProps)
     // Status distribution for pie chart
     const statusData = [
       { name: 'Confirmed', value: confirmed, color: COLORS[1] },
-      { name: 'Pending', value: pending, color: COLORS[2] },
+      { name: 'Tentative', value: tentative, color: COLORS[4] },
+      { name: 'Pending Payment', value: pending, color: COLORS[2] },
       { name: 'Cancelled', value: cancelled, color: COLORS[3] }
     ].filter(item => item.value > 0);
     
     // Turf performance
     const turfPerformance = turfs.map(turf => {
-      const turfBookings = filteredData.filter(b => b.turfName === turf.name);
-      const turfRevenue = turfBookings
-        .filter(b => b.paymentStatus === 'completed')
+      const turfBookings = filteredData.filter(b => b.turfName === turf.name && b.bookingStatus !== 'cancelled');
+      const turfConfirmedRevenue = filteredData
+        .filter(b => b.turfName === turf.name && b.bookingStatus === 'confirmed' && b.paymentStatus === 'completed')
+        .reduce((sum, b) => sum + (b.totalAmount || 0), 0);
+      
+      const turfTentativeRevenue = filteredData
+        .filter(b => b.turfName === turf.name && (b.bookingStatus === 'tentative' || (b.paymentStatus === 'pending' && b.bookingStatus !== 'cancelled')))
         .reduce((sum, b) => sum + (b.totalAmount || 0), 0);
       
       return {
         name: turf.name,
         bookings: turfBookings.length,
-        revenue: turfRevenue,
-        avgValue: turfBookings.length > 0 ? turfRevenue / turfBookings.length : 0
+        confirmedRevenue: turfConfirmedRevenue,
+        tentativeRevenue: turfTentativeRevenue,
+        revenue: turfConfirmedRevenue, // Only confirmed revenue for ranking
+        totalPotential: turfConfirmedRevenue + turfTentativeRevenue,
+        avgValue: turfBookings.length > 0 ? (turfConfirmedRevenue + turfTentativeRevenue) / turfBookings.length : 0
       };
     }).sort((a, b) => b.revenue - a.revenue);
     
     return {
       total,
       confirmed,
+      tentative,
       pending,
       cancelled,
       totalRevenue,
+      confirmedRevenue,
+      tentativeRevenue,
+      lostRevenue,
+      totalPotentialRevenue,
       avgBookingValue,
       dailyData,
       hourlyData,
       statusData,
       turfPerformance,
-      confirmationRate: total > 0 ? (confirmed / total) * 100 : 0,
-      cancellationRate: total > 0 ? (cancelled / total) * 100 : 0
+      confirmationRate: (total + cancelled) > 0 ? (confirmed / (total + cancelled)) * 100 : 0, // Based on all attempted bookings
+      cancellationRate: (total + cancelled) > 0 ? (cancelled / (total + cancelled)) * 100 : 0
     };
   }, [filteredData, turfs]);
   
@@ -237,13 +277,14 @@ export function BookingAnalytics({ bookings, onRefresh }: BookingAnalyticsProps)
       </div>
       
       {/* Key Metrics Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
         <Card>
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-gray-600">Total Bookings</p>
                 <p className="text-2xl font-bold text-gray-900">{analytics.total}</p>
+                <p className="text-xs text-gray-500">{analytics.cancelled} cancelled</p>
               </div>
               <div className="p-3 bg-blue-100 rounded-full">
                 <Calendar className="w-6 h-6 text-blue-600" />
@@ -256,13 +297,48 @@ export function BookingAnalytics({ bookings, onRefresh }: BookingAnalyticsProps)
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600">Total Revenue</p>
-                <p className="text-2xl font-bold text-gray-900">
+                <p className="text-sm font-medium text-gray-600">Confirmed Revenue</p>
+                <p className="text-2xl font-bold text-green-900">
                   ₹{analytics.totalRevenue.toLocaleString()}
                 </p>
+                <p className="text-xs text-gray-500">Actual earnings</p>
               </div>
               <div className="p-3 bg-green-100 rounded-full">
                 <DollarSign className="w-6 h-6 text-green-600" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600">Tentative Revenue</p>
+                <p className="text-2xl font-bold text-yellow-900">
+                  ₹{analytics.tentativeRevenue.toLocaleString()}
+                </p>
+                <p className="text-xs text-gray-500">Potential earnings</p>
+              </div>
+              <div className="p-3 bg-yellow-100 rounded-full">
+                <Clock className="w-6 h-6 text-yellow-600" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600">Lost Revenue</p>
+                <p className="text-2xl font-bold text-red-900">
+                  ₹{analytics.lostRevenue.toLocaleString()}
+                </p>
+                <p className="text-xs text-gray-500">From cancellations</p>
+              </div>
+              <div className="p-3 bg-red-100 rounded-full">
+                <TrendingDown className="w-6 h-6 text-red-600" />
               </div>
             </div>
           </CardContent>
@@ -276,6 +352,7 @@ export function BookingAnalytics({ bookings, onRefresh }: BookingAnalyticsProps)
                 <p className="text-2xl font-bold text-gray-900">
                   {analytics.confirmationRate.toFixed(1)}%
                 </p>
+                <p className="text-xs text-gray-500">Success rate</p>
               </div>
               <div className={cn(
                 "p-3 rounded-full",
@@ -285,22 +362,6 @@ export function BookingAnalytics({ bookings, onRefresh }: BookingAnalyticsProps)
                   "w-6 h-6",
                   analytics.confirmationRate >= 70 ? "text-green-600" : "text-yellow-600"
                 )} />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">Avg Booking Value</p>
-                <p className="text-2xl font-bold text-gray-900">
-                  ₹{analytics.avgBookingValue.toFixed(0)}
-                </p>
-              </div>
-              <div className="p-3 bg-purple-100 rounded-full">
-                <Star className="w-6 h-6 text-purple-600" />
               </div>
             </div>
           </CardContent>
@@ -352,8 +413,12 @@ export function BookingAnalytics({ bookings, onRefresh }: BookingAnalyticsProps)
                       />
                       <Tooltip 
                         formatter={(value, name) => [
-                          name === 'revenue' ? `₹${value}` : value,
-                          name === 'revenue' ? 'Revenue' : 'Bookings'
+                          name === 'revenue' ? `₹${value} (Confirmed)` : 
+                          name === 'tentativeRevenue' ? `₹${value} (Tentative)` :
+                          name === 'bookings' ? `${value} bookings` : value,
+                          name === 'revenue' ? 'Confirmed Revenue' : 
+                          name === 'tentativeRevenue' ? 'Tentative Revenue' :
+                          name === 'bookings' ? 'Bookings' : name
                         ]}
                         contentStyle={{
                           backgroundColor: 'rgba(255, 255, 255, 0.95)',
@@ -376,6 +441,16 @@ export function BookingAnalytics({ bookings, onRefresh }: BookingAnalyticsProps)
                         dataKey="revenue"
                         stroke="#10B981"
                         strokeWidth={3}
+                        name="Confirmed Revenue"
+                      />
+                      <Line
+                        yAxisId="right"
+                        type="monotone"
+                        dataKey="tentativeRevenue"
+                        stroke="#F59E0B"
+                        strokeWidth={2}
+                        strokeDasharray="5 5"
+                        name="Tentative Revenue"
                       />
                     </ComposedChart>
                   </ResponsiveContainer>
@@ -494,8 +569,21 @@ export function BookingAnalytics({ bookings, onRefresh }: BookingAnalyticsProps)
                 
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
+                    <div className="w-3 h-3 bg-purple-500 rounded-full"></div>
+                    <span className="text-sm font-medium">Tentative</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-lg font-bold">{analytics.tentative}</span>
+                    <Badge variant="outline">
+                      {((analytics.tentative / analytics.total) * 100).toFixed(1)}%
+                    </Badge>
+                  </div>
+                </div>
+                
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
                     <div className="w-3 h-3 bg-yellow-500 rounded-full"></div>
-                    <span className="text-sm font-medium">Pending</span>
+                    <span className="text-sm font-medium">Pending Payment</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="text-lg font-bold">{analytics.pending}</span>
@@ -523,6 +611,14 @@ export function BookingAnalytics({ bookings, onRefresh }: BookingAnalyticsProps)
                 <div className="flex items-center justify-between">
                   <span className="text-sm font-medium text-gray-600">Total Bookings</span>
                   <span className="text-xl font-bold">{analytics.total}</span>
+                </div>
+                
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium text-gray-600">Revenue Impact</span>
+                  <div className="text-right">
+                    <div className="text-sm font-bold text-green-700">+₹{analytics.totalRevenue.toLocaleString()}</div>
+                    <div className="text-xs text-red-600">-₹{analytics.lostRevenue.toLocaleString()}</div>
+                  </div>
                 </div>
               </CardContent>
             </Card>
@@ -555,11 +651,20 @@ export function BookingAnalytics({ bookings, onRefresh }: BookingAnalyticsProps)
                         <p className="text-sm text-gray-600">
                           {turf.bookings} bookings • ₹{turf.avgValue.toFixed(0)} avg
                         </p>
+                        <div className="flex gap-2 text-xs">
+                          <span className="text-green-600">₹{turf.confirmedRevenue.toLocaleString()} confirmed</span>
+                          {turf.tentativeRevenue > 0 && (
+                            <span className="text-yellow-600">₹{turf.tentativeRevenue.toLocaleString()} pending</span>
+                          )}
+                        </div>
                       </div>
                     </div>
                     <div className="text-right">
                       <p className="text-lg font-bold">₹{turf.revenue.toLocaleString()}</p>
-                      <p className="text-sm text-gray-600">Revenue</p>
+                      <p className="text-sm text-gray-600">Confirmed Revenue</p>
+                      {turf.totalPotential > turf.revenue && (
+                        <p className="text-xs text-yellow-600">₹{turf.totalPotential.toLocaleString()} potential</p>
+                      )}
                     </div>
                   </div>
                 ))}
