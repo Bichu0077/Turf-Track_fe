@@ -3,12 +3,3 @@
   to   = "https://turf-track-be.onrender.com/api/:splat"
   status = 200
 
-# Supabase Configuration
-VITE_SUPABASE_URL=https://tauxgexktawtrpejhcqh.supabase.co
-VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRhdXhnZXhrdGF3dHJwZWpoY3FoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTU1OTQwNjMsImV4cCI6MjA3MTE3MDA2M30.P7B3Qi1YAnEOoQNSnkU6v97r16CwrKdXdl8xEm3-0vw
-
-# API Configuration
-VITE_API_URL=http://localhost:3000
-
-# Razorpay Configuration
-VITE_RAZORPAY_KEY_ID=rzp_test_RPHF6pjUi95HWh
