@@ -49,7 +49,29 @@ const chartConfig = {
   },
 };
 
-const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8', '#82CA9D'];
+const COLORS = ['#10B981', '#3B82F6', '#F59E0B', '#EF4444', '#8B5CF6', '#82CA9D'];
+
+// Color mappings for specific statuses
+const getBookingStatusColor = (status: string) => {
+  const normalizedStatus = status.toLowerCase();
+  switch (normalizedStatus) {
+    case 'confirmed': return '#10B981'; // Green
+    case 'cancelled': return '#EF4444'; // Red  
+    case 'tentative': return '#F59E0B'; // Yellow
+    case 'pending': return '#3B82F6'; // Blue
+    default: return '#8B5CF6'; // Purple for any other status
+  }
+};
+
+const getPaymentStatusColor = (status: string) => {
+  const normalizedStatus = status.toLowerCase();
+  switch (normalizedStatus) {
+    case 'completed': return '#10B981'; // Green
+    case 'pending': return '#3B82F6'; // Blue
+    case 'failed': return '#EF4444'; // Red
+    default: return '#F59E0B'; // Yellow for any other status
+  }
+};
 
 export default function AdminDashboard() {
   const [activeTurfs, setActiveTurfs] = useState<number | null>(null);
@@ -309,7 +331,7 @@ export default function AdminDashboard() {
                             dataKey="count"
                           >
                             {analyticsData?.bookingStatusDistribution?.map((entry, index) => (
-                              <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                              <Cell key={`cell-${index}`} fill={getBookingStatusColor(entry.status)} />
                             ))}
                           </Pie>
                           <ChartTooltip 
@@ -327,7 +349,7 @@ export default function AdminDashboard() {
                           <div className="flex items-center gap-2">
                             <div 
                               className="w-3 h-3 rounded-full" 
-                              style={{ backgroundColor: COLORS[index % COLORS.length] }}
+                              style={{ backgroundColor: getBookingStatusColor(entry.status) }}
                             />
                             <span className="font-medium capitalize">{entry.status}</span>
                           </div>
@@ -363,7 +385,7 @@ export default function AdminDashboard() {
                             dataKey="count"
                           >
                           {analyticsData?.paymentStatusDistribution?.map((entry, index) => (
-                            <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                            <Cell key={`cell-${index}`} fill={getPaymentStatusColor(entry.status)} />
                           ))}
                         </Pie>
                         <ChartTooltip 
@@ -381,7 +403,7 @@ export default function AdminDashboard() {
                           <div className="flex items-center gap-2">
                             <div 
                               className="w-3 h-3 rounded-full" 
-                              style={{ backgroundColor: COLORS[index % COLORS.length] }}
+                              style={{ backgroundColor: getPaymentStatusColor(entry.status) }}
                             />
                             <span className="font-medium capitalize">{entry.status}</span>
                           </div>

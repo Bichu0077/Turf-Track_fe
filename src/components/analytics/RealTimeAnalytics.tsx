@@ -35,44 +35,78 @@ export function RealTimeAnalytics({ bookings, refreshInterval = 30000, onRefresh
   }, [refreshInterval]);
   
   // Real-time calculations
-  const todayBookings = bookings.filter(booking => 
-    isToday(parseISO(booking.bookingDate))
-  );
+  const todayBookings = bookings.filter(booking => {
+    try {
+      // Handle both date string formats
+      const bookingDate = typeof booking.bookingDate === 'string' 
+        ? new Date(booking.bookingDate) 
+        : parseISO(booking.bookingDate);
+      
+      return isToday(bookingDate) && booking.bookingStatus !== 'cancelled';
+    } catch (error) {
+      console.error('Error parsing booking date:', error);
+      return false;
+    }
+  });
   
   const activeBookings = todayBookings.filter(booking => {
-    const now = new Date();
-    const bookingDate = parseISO(booking.bookingDate);
-    const startTime = booking.startTime;
-    const endTime = booking.endTime;
-    
-    const startDateTime = new Date(`${format(bookingDate, 'yyyy-MM-dd')}T${startTime}`);
-    const endDateTime = new Date(`${format(bookingDate, 'yyyy-MM-dd')}T${endTime}`);
-    
-    return now >= startDateTime && now <= endDateTime && booking.bookingStatus === 'confirmed';
+    try {
+      const now = new Date();
+      const bookingDate = typeof booking.bookingDate === 'string' 
+        ? new Date(booking.bookingDate) 
+        : parseISO(booking.bookingDate);
+      
+      // Handle both HH:mm and HH:mm:ss time formats
+      const cleanStartTime = booking.startTime.split(':').slice(0, 2).join(':');
+      const cleanEndTime = booking.endTime.split(':').slice(0, 2).join(':');
+      
+      const startDateTime = new Date(`${format(bookingDate, 'yyyy-MM-dd')}T${cleanStartTime}:00`);
+      const endDateTime = new Date(`${format(bookingDate, 'yyyy-MM-dd')}T${cleanEndTime}:00`);
+      
+      return now >= startDateTime && now <= endDateTime && booking.bookingStatus === 'confirmed';
+    } catch (error) {
+      console.error('Error calculating active bookings:', error);
+      return false;
+    }
   });
   
   const upcomingBookings = todayBookings.filter(booking => {
-    const now = new Date();
-    const bookingDate = parseISO(booking.bookingDate);
-    const startTime = booking.startTime;
-    
-    const startDateTime = new Date(`${format(bookingDate, 'yyyy-MM-dd')}T${startTime}`);
-    
-    return startDateTime > now && booking.bookingStatus === 'confirmed';
+    try {
+      const now = new Date();
+      const bookingDate = typeof booking.bookingDate === 'string' 
+        ? new Date(booking.bookingDate) 
+        : parseISO(booking.bookingDate);
+      
+      // Handle both HH:mm and HH:mm:ss time formats
+      const cleanStartTime = booking.startTime.split(':').slice(0, 2).join(':');
+      const startDateTime = new Date(`${format(bookingDate, 'yyyy-MM-dd')}T${cleanStartTime}:00`);
+      
+      return startDateTime > now && booking.bookingStatus === 'confirmed';
+    } catch (error) {
+      console.error('Error calculating upcoming bookings:', error);
+      return false;
+    }
   }).sort((a, b) => a.startTime.localeCompare(b.startTime));
   
   const pendingPayments = todayBookings.filter(booking => 
-    booking.paymentStatus === 'pending'
+    booking.paymentStatus === 'pending' && booking.bookingStatus !== 'cancelled'
   );
   
   const todayRevenue = todayBookings
-    .filter(booking => booking.paymentStatus === 'completed')
+    .filter(booking => booking.paymentStatus === 'completed' && booking.bookingStatus !== 'cancelled')
     .reduce((sum, booking) => sum + booking.totalAmount, 0);
   
   const hourlyBookings = Array.from({ length: 24 }, (_, hour) => {
     const count = todayBookings.filter(booking => {
-      const bookingHour = parseInt(booking.startTime.split(':')[0]);
-      return bookingHour === hour;
+      try {
+        // Handle both HH:mm and HH:mm:ss time formats
+        const cleanStartTime = booking.startTime.split(':')[0];
+        const bookingHour = parseInt(cleanStartTime);
+        return bookingHour === hour && booking.bookingStatus !== 'cancelled';
+      } catch (error) {
+        console.error('Error parsing hour from booking time:', error);
+        return false;
+      }
     }).length;
     
     return { hour, count };

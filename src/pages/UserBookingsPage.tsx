@@ -8,8 +8,11 @@ import { formatCurrencyINR } from "@/lib/format";
 import { jsPDF } from "jspdf";
 import { useAuth } from "@/hooks/useAuth";
 import { useEffect, useState, useMemo } from "react";
-import { getMyBookings } from "@/hooks/useBooking";
-import type { Booking } from "@/types";
+import { getMyBookings, cancelBooking, payLater, verifyPayment } from "@/hooks/useBooking";
+import { CancellationDialog } from "@/components/booking/CancellationDialog";
+import { canCancelBooking, initiatePayment, validateRazorpayConfig } from "@/lib/razorpay";
+import { toast } from "sonner";
+import type { Booking, RazorpayResponse } from "@/types";
 import { format, parseISO, isToday, isFuture, isPast, isAfter, isBefore } from "date-fns";
 import { 
   Calendar, 
@@ -23,7 +26,9 @@ import {
   History,
   Receipt,
   User,
-  CreditCard
+  CreditCard,
+  Banknote,
+  RefreshCw
 } from "lucide-react";
 
 // TurfTrack green: #16a34a
@@ -93,14 +98,49 @@ function downloadReceipt(booking: Booking) {
   doc.setTextColor(0,0,0);
   y += 8;
   doc.setFont(undefined, 'bold');
-  doc.text('Status:', 20, y);
+  doc.text('Payment Method:', 20, y);
   doc.setFont(undefined, 'normal');
-  doc.text(`${booking.bookingStatus} • Payment: ${booking.paymentStatus}`, 60, y);
+  doc.text(`${booking.paymentMethod === 'cash' ? 'Pay at Turf' : 'Online Payment'}`, 60, y);
+  y += 8;
+  doc.setFont(undefined, 'bold');
+  doc.text('Payment Status:', 20, y);
+  doc.setFont(undefined, 'normal');
+  doc.text(`${booking.paymentStatus}`, 60, y);
+  y += 8;
+  doc.setFont(undefined, 'bold');
+  doc.text('Booking Status:', 20, y);
+  doc.setFont(undefined, 'normal');
+  doc.text(`${booking.bookingStatus}`, 60, y);
+  y += 8;
+
+  // Add cancellation details if cancelled
+  if (booking.bookingStatus === 'cancelled') {
+    y += 5;
+    doc.setFont(undefined, 'bold');
+    doc.text('Cancellation Details:', 20, y);
+    y += 8;
+    if (booking.cancelledAt) {
+      doc.setFont(undefined, 'bold');
+      doc.text('Cancelled At:', 20, y);
+      doc.setFont(undefined, 'normal');
+      doc.text(`${format(parseISO(booking.cancelledAt), 'dd/MM/yyyy HH:mm')}`, 60, y);
+      y += 8;
+    }
+    if (booking.refundAmount !== undefined) {
+      doc.setFont(undefined, 'bold');
+      doc.text('Refund Amount:', 20, y);
+      doc.setFont(undefined, 'normal');
+      doc.setTextColor(booking.refundAmount > 0 ? 22 : 220, booking.refundAmount > 0 ? 163 : 38, booking.refundAmount > 0 ? 74 : 38);
+      doc.text(`${formatINRForPDF(booking.refundAmount)}`, 60, y);
+      doc.setTextColor(0,0,0);
+      y += 8;
+    }
+  }
 
   // Footer
   doc.setFontSize(10);
   doc.setTextColor(120, 120, 120);
-  doc.text('Thank you for booking with TurfTrack!', 20, 120);
+  doc.text('Thank you for booking with TurfTrack!', 20, y + 10);
 
   doc.save(`TurfTrack-Receipt-${booking.id}.pdf`);
 }
@@ -109,20 +149,174 @@ export default function UserBookingsPage() {
   const { user } = useAuth();
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(true);
+  const [cancellationDialog, setCancellationDialog] = useState<{
+    open: boolean;
+    booking: Booking | null;
+  }>({ open: false, booking: null });
+  const [processingActions, setProcessingActions] = useState<Set<string>>(new Set());
 
   useEffect(() => {
-    (async () => {
-      try {
-        setLoading(true);
-        const data = await getMyBookings();
-        setBookings(data);
-      } catch (e) {
-        // ignore
-      } finally {
-        setLoading(false);
-      }
-    })();
+    console.log('[UserBookingsPage] Component mounted, starting to load bookings...');
+    loadBookings();
   }, []);
+
+  const loadBookings = async () => {
+    try {
+      console.log('[UserBookingsPage] loadBookings called');
+      setLoading(true);
+      console.log('[UserBookingsPage] About to call getMyBookings...');
+      const data = await getMyBookings();
+      console.log('[UserBookingsPage] getMyBookings returned:', data);
+      setBookings(data);
+    } catch (e) {
+      console.error('[UserBookingsPage] Error loading bookings:', e);
+      toast.error("Failed to load bookings");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCancelBooking = async (reason: string) => {
+    if (!cancellationDialog.booking) return;
+    
+    const bookingId = cancellationDialog.booking.id;
+    setProcessingActions(prev => new Set(prev).add(bookingId));
+
+    try {
+      await cancelBooking({ bookingId, reason });
+      toast.success("Booking cancelled successfully");
+      await loadBookings(); // Reload bookings
+    } catch (error) {
+      toast.error("Failed to cancel booking");
+      console.error("Cancellation error:", error);
+    } finally {
+      setProcessingActions(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(bookingId);
+        return newSet;
+      });
+      setCancellationDialog({ open: false, booking: null });
+    }
+  };
+
+  const handlePayLater = async (booking: Booking) => {
+    if (!validateRazorpayConfig()) {
+      toast.error("Online payment is currently unavailable");
+      return;
+    }
+
+    const bookingId = booking.id;
+    setProcessingActions(prev => new Set(prev).add(bookingId));
+
+    try {
+      // Create payment order
+      const paymentDetails = await payLater(bookingId);
+
+      // Initiate Razorpay payment
+      await initiatePayment(
+        paymentDetails,
+        async (response: RazorpayResponse) => {
+          // Payment successful, verify on backend
+          try {
+            await verifyPayment({
+              bookingId,
+              razorpayResponse: response,
+            });
+            
+            toast.success('Payment successful! Your booking payment is now completed.');
+            await loadBookings(); // Reload bookings to update status
+          } catch (error) {
+            toast.error('Payment verification failed. Please contact support.');
+            console.error('Payment verification error:', error);
+          }
+        },
+        (error: Error) => {
+          // Payment failed or cancelled
+          toast.error(error.message || 'Payment failed. Please try again.');
+          console.error('Payment error:', error);
+        }
+      );
+    } catch (error) {
+      toast.error('Failed to initiate payment. Please try again.');
+      console.error('Payment initiation error:', error);
+    } finally {
+      setProcessingActions(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(bookingId);
+        return newSet;
+      });
+    }
+  };
+
+  const handlePayNow = async (booking: Booking) => {
+    if (!validateRazorpayConfig()) {
+      toast.error("Online payment is currently unavailable");
+      return;
+    }
+
+    const bookingId = booking.id;
+    setProcessingActions(prev => new Set(prev).add(bookingId));
+
+    try {
+      // For tentative or pending online bookings, initiate payment directly
+      const paymentDetails = {
+        orderId: booking.razorpayOrderId || '',
+        amount: booking.totalAmount,
+        currency: 'INR',
+        key: import.meta.env.VITE_RAZORPAY_KEY_ID || '',
+        name: 'Turf Track',
+        description: `Payment for ${booking.turfName}`,
+        prefill: {
+          name: booking.userName,
+          email: booking.userEmail,
+          contact: booking.userPhone || '',
+        },
+        theme: {
+          color: '#16a34a',
+        },
+      };
+
+      // If no order ID, create a new payment order
+      if (!booking.razorpayOrderId) {
+        const newPaymentDetails = await payLater(bookingId);
+        paymentDetails.orderId = newPaymentDetails.orderId;
+      }
+
+      // Initiate Razorpay payment
+      await initiatePayment(
+        paymentDetails,
+        async (response: RazorpayResponse) => {
+          // Payment successful, verify on backend
+          try {
+            await verifyPayment({
+              bookingId,
+              razorpayResponse: response,
+            });
+            
+            toast.success('Payment successful! Your booking is now confirmed.');
+            await loadBookings(); // Reload bookings to update status
+          } catch (error) {
+            toast.error('Payment verification failed. Please contact support.');
+            console.error('Payment verification error:', error);
+          }
+        },
+        (error: Error) => {
+          // Payment failed or cancelled
+          toast.error(error.message || 'Payment failed. Please try again.');
+          console.error('Payment error:', error);
+        }
+      );
+    } catch (error) {
+      toast.error('Failed to initiate payment. Please try again.');
+      console.error('Payment initiation error:', error);
+    } finally {
+      setProcessingActions(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(bookingId);
+        return newSet;
+      });
+    }
+  };
 
   // Categorize bookings for user perspective
   const { upcomingBookings, pastBookings, activeBookings } = useMemo(() => {
@@ -147,9 +341,10 @@ export default function UserBookingsPage() {
       }
       
       // Check if booking is upcoming (future or today but not started)
-      if (isFuture(bookingDate) || (isToday(bookingDate) && booking.bookingStatus === 'confirmed')) {
+      // Include tentative bookings in upcoming so users can complete payment
+      if (isFuture(bookingDate) || (isToday(bookingDate) && (booking.bookingStatus === 'confirmed' || booking.bookingStatus === 'tentative'))) {
         const startDateTime = new Date(`${format(bookingDate, 'yyyy-MM-dd')}T${booking.startTime}`);
-        if (startDateTime > now) {
+        if (startDateTime > now || booking.bookingStatus === 'tentative') {
           upcoming.push(booking);
           return;
         }
@@ -187,6 +382,7 @@ export default function UserBookingsPage() {
     switch (status) {
       case 'confirmed': return <CheckCircle className="w-4 h-4 text-green-600" />;
       case 'cancelled': return <XCircle className="w-4 h-4 text-red-600" />;
+      case 'tentative': return <AlertCircle className="w-4 h-4 text-amber-600" />;
       default: return <AlertCircle className="w-4 h-4 text-yellow-600" />;
     }
   };
@@ -201,127 +397,289 @@ export default function UserBookingsPage() {
   };
 
   const isCurrentlyActive = (booking: Booking) => {
-    const bookingDate = parseISO(booking.bookingDate);
-    if (!isToday(bookingDate) || booking.bookingStatus !== 'confirmed') return false;
-    
-    const now = new Date();
-    const startDateTime = new Date(`${format(bookingDate, 'yyyy-MM-dd')}T${booking.startTime}`);
-    const endDateTime = new Date(`${format(bookingDate, 'yyyy-MM-dd')}T${booking.endTime}`);
-    
-    return now >= startDateTime && now <= endDateTime;
+    try {
+      const bookingDate = parseISO(booking.bookingDate);
+      if (!isToday(bookingDate) || booking.bookingStatus !== 'confirmed') return false;
+      
+      const now = new Date();
+      
+      // Handle both HH:mm and HH:mm:ss time formats
+      const cleanStartTime = booking.startTime.split(':').slice(0, 2).join(':');
+      const cleanEndTime = booking.endTime.split(':').slice(0, 2).join(':');
+      
+      const startDateTime = new Date(`${format(bookingDate, 'yyyy-MM-dd')}T${cleanStartTime}:00`);
+      const endDateTime = new Date(`${format(bookingDate, 'yyyy-MM-dd')}T${cleanEndTime}:00`);
+      
+      return now >= startDateTime && now <= endDateTime;
+    } catch (error) {
+      console.error('Error in isCurrentlyActive:', error);
+      return false;
+    }
   };
 
   const getTimeUntilBooking = (booking: Booking) => {
-    const now = new Date();
-    const bookingDate = parseISO(booking.bookingDate);
-    const startDateTime = new Date(`${format(bookingDate, 'yyyy-MM-dd')}T${booking.startTime}`);
-    
-    const diffInHours = Math.floor((startDateTime.getTime() - now.getTime()) / (1000 * 60 * 60));
-    
-    if (diffInHours < 24) {
-      if (diffInHours < 1) {
-        const diffInMinutes = Math.floor((startDateTime.getTime() - now.getTime()) / (1000 * 60));
-        return `${diffInMinutes} minutes`;
+    try {
+      const now = new Date();
+      const bookingDate = parseISO(booking.bookingDate);
+      
+      // Handle both HH:mm and HH:mm:ss time formats
+      const cleanStartTime = booking.startTime.split(':').slice(0, 2).join(':');
+      const startDateTime = new Date(`${format(bookingDate, 'yyyy-MM-dd')}T${cleanStartTime}:00`);
+      
+      const diffInHours = Math.floor((startDateTime.getTime() - now.getTime()) / (1000 * 60 * 60));
+      
+      if (diffInHours < 24) {
+        if (diffInHours < 1) {
+          const diffInMinutes = Math.floor((startDateTime.getTime() - now.getTime()) / (1000 * 60));
+          return `${diffInMinutes} minutes`;
+        }
+        return `${diffInHours} hours`;
+      } else {
+        const diffInDays = Math.floor(diffInHours / 24);
+        return `${diffInDays} days`;
       }
-      return `${diffInHours} hours`;
-    } else {
-      const diffInDays = Math.floor(diffInHours / 24);
-      return `${diffInDays} days`;
+    } catch (error) {
+      console.error('Error in getTimeUntilBooking:', error);
+      return 'Invalid time';
     }
   };
 
   // User-friendly booking card component
-  const BookingCard = ({ booking, showCountdown = false }: { booking: Booking, showCountdown?: boolean }) => (
-    <Card className={`transition-shadow hover:shadow-md ${isCurrentlyActive(booking) ? 'ring-2 ring-green-500 bg-green-50' : ''}`}>
-      <CardContent className="p-6">
-        <div className="space-y-4">
-          {/* Header with turf name and status */}
-          <div className="flex items-start justify-between">
-            <div className="space-y-1">
-              <h3 className="font-semibold text-lg flex items-center gap-2">
-                <MapPin className="w-5 h-5 text-primary" />
-                {booking.turfName}
-                {isCurrentlyActive(booking) && (
-                  <Badge className="bg-green-600 hover:bg-green-700">
-                    <Play className="w-3 h-3 mr-1" />
-                    LIVE NOW
+  const BookingCard = ({ booking, showCountdown = false }: { booking: Booking, showCountdown?: boolean }) => {
+    const isProcessing = processingActions.has(booking.id);
+    const canPayLater = booking.paymentMethod === 'cash' && booking.paymentStatus === 'pending' && booking.bookingStatus === 'confirmed';
+    const canPayNow = booking.paymentMethod === 'online' && booking.paymentStatus === 'pending' && (booking.bookingStatus === 'confirmed' || booking.bookingStatus === 'tentative');
+    
+    // Safe date parsing to avoid Invalid Date errors
+    let isInFuture = false;
+    let showCancelButton = false;
+    
+    try {
+      if (booking.bookingDate && booking.startTime) {
+        // Handle both HH:mm and HH:mm:ss time formats
+        const cleanStartTime = booking.startTime.split(':').slice(0, 2).join(':');
+        const bookingDateTime = new Date(`${booking.bookingDate}T${cleanStartTime}:00`);
+        
+        if (!isNaN(bookingDateTime.getTime())) {
+          isInFuture = bookingDateTime > new Date();
+          // Show cancel button ONLY for future bookings that are confirmed or tentative
+          showCancelButton = isInFuture && (booking.bookingStatus === 'confirmed' || booking.bookingStatus === 'tentative');
+        }
+      }
+    } catch (error) {
+      console.error('Error parsing booking date/time:', error);
+    }
+
+    return (
+      <Card className={`transition-shadow hover:shadow-md ${isCurrentlyActive(booking) ? 'ring-2 ring-green-500 bg-green-50' : ''}`}>
+        <CardContent className="p-6">
+          <div className="space-y-4">
+            {/* Header with turf name and status */}
+            <div className="flex items-start justify-between">
+              <div className="space-y-1">
+                <h3 className="font-semibold text-lg flex items-center gap-2">
+                  <MapPin className="w-5 h-5 text-primary" />
+                  {booking.turfName}
+                  {isCurrentlyActive(booking) && (
+                    <Badge className="bg-green-600 hover:bg-green-700">
+                      <Play className="w-3 h-3 mr-1" />
+                      LIVE NOW
+                    </Badge>
+                  )}
+                  {booking.bookingStatus === 'cancelled' && (
+                    <Badge variant="destructive">
+                      <XCircle className="w-3 h-3 mr-1" />
+                      CANCELLED
+                    </Badge>
+                  )}
+                  {booking.bookingStatus === 'tentative' && (
+                    <Badge variant="outline" className="border-amber-500 text-amber-600">
+                      <AlertCircle className="w-3 h-3 mr-1" />
+                      PAYMENT PENDING
+                    </Badge>
+                  )}
+                </h3>
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  {getBookingStatusIcon(booking.bookingStatus)}
+                  <span className="capitalize">{booking.bookingStatus}</span>
+                </div>
+              </div>
+              <div className="text-right">
+                <div className="text-2xl font-bold text-primary">{formatCurrencyINR(booking.totalAmount)}</div>
+                <div className="flex items-center gap-2 mt-1">
+                  <Badge variant={getPaymentStatusColor(booking.paymentStatus) as "default" | "secondary" | "destructive" | "outline"}>
+                    <CreditCard className="w-3 h-3 mr-1" />
+                    {booking.paymentStatus}
                   </Badge>
-                )}
-              </h3>
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                {getBookingStatusIcon(booking.bookingStatus)}
-                <span className="capitalize">{booking.bookingStatus}</span>
-              </div>
-            </div>
-            <div className="text-right">
-              <div className="text-2xl font-bold text-primary">{formatCurrencyINR(booking.totalAmount)}</div>
-              <Badge variant={getPaymentStatusColor(booking.paymentStatus) as "default" | "secondary" | "destructive" | "outline"} className="mt-1">
-                <CreditCard className="w-3 h-3 mr-1" />
-                {booking.paymentStatus}
-              </Badge>
-            </div>
-          </div>
-
-          <Separator />
-
-          {/* Date and time details */}
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Calendar className="w-4 h-4 text-muted-foreground" />
-                <span className="font-medium">{format(parseISO(booking.bookingDate), 'EEEE, MMMM dd, yyyy')}</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Clock className="w-4 h-4 text-muted-foreground" />
-                <span className="font-medium">{booking.startTime} - {booking.endTime}</span>
-              </div>
-            </div>
-
-            {/* Countdown for upcoming bookings */}
-            {showCountdown && !isCurrentlyActive(booking) && (
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-                <div className="flex items-center gap-2 text-blue-800">
-                  <Clock className="w-4 h-4" />
-                  <span className="text-sm font-medium">
-                    Starts in {getTimeUntilBooking(booking)}
-                  </span>
+                  {booking.paymentMethod && (
+                    <Badge variant="outline" className="text-xs">
+                      {booking.paymentMethod === 'cash' ? (
+                        <>
+                          <Banknote className="w-3 h-3 mr-1" />
+                          Pay at Turf
+                        </>
+                      ) : (
+                        <>
+                          <CreditCard className="w-3 h-3 mr-1" />
+                          Online
+                        </>
+                      )}
+                    </Badge>
+                  )}
                 </div>
               </div>
-            )}
+            </div>
 
-            {/* Live session indicator */}
-            {isCurrentlyActive(booking) && (
-              <div className="bg-green-50 border border-green-200 rounded-lg p-3">
-                <div className="flex items-center gap-2 text-green-800">
-                  <Play className="w-4 h-4" />
-                  <span className="text-sm font-medium">Your session is live! Enjoy your game!</span>
+            <Separator />
+
+            {/* Date and time details */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Calendar className="w-4 h-4 text-muted-foreground" />
+                  <span className="font-medium">{format(parseISO(booking.bookingDate), 'EEEE, MMMM dd, yyyy')}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Clock className="w-4 h-4 text-muted-foreground" />
+                  <span className="font-medium">{booking.startTime} - {booking.endTime}</span>
                 </div>
               </div>
-            )}
-          </div>
 
-          <Separator />
+              {/* Countdown for upcoming bookings */}
+              {showCountdown && !isCurrentlyActive(booking) && booking.bookingStatus === 'confirmed' && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                  <div className="flex items-center gap-2 text-blue-800">
+                    <Clock className="w-4 h-4" />
+                    <span className="text-sm font-medium">
+                      Starts in {getTimeUntilBooking(booking)}
+                    </span>
+                  </div>
+                </div>
+              )}
 
-          {/* Actions */}
-          <div className="flex gap-2">
-            <Button 
-              variant="outline" 
-              onClick={() => downloadReceipt(booking)}
-              className="flex-1"
-            >
-              <Receipt className="w-4 h-4 mr-2" />
-              Download Receipt
-            </Button>
-          </div>
+              {/* Live session indicator */}
+              {isCurrentlyActive(booking) && (
+                <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+                  <div className="flex items-center gap-2 text-green-800">
+                    <Play className="w-4 h-4" />
+                    <span className="text-sm font-medium">Your session is live! Enjoy your game!</span>
+                  </div>
+                </div>
+              )}
 
-          {/* Booking ID */}
-          <div className="text-xs text-muted-foreground">
-            Booking ID: <span className="font-mono">{booking.id}</span>
+              {/* Cancellation info */}
+              {booking.bookingStatus === 'cancelled' && (
+                <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2 text-red-800">
+                      <XCircle className="w-4 h-4" />
+                      <span className="text-sm font-medium">
+                        Booking Cancelled
+                        {booking.cancelledAt && ` on ${format(parseISO(booking.cancelledAt), 'dd/MM/yyyy')}`}
+                      </span>
+                    </div>
+                    {booking.refundAmount !== undefined && (
+                      <div className="text-sm text-red-700">
+                        Refund Amount: <span className="font-medium">{formatCurrencyINR(booking.refundAmount)}</span>
+                      </div>
+                    )}
+                    {booking.cancellationReason && (
+                      <div className="text-sm text-red-700">
+                        Reason: {booking.cancellationReason}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Payment pending info */}
+              {booking.paymentStatus === 'pending' && (booking.bookingStatus === 'confirmed' || booking.bookingStatus === 'tentative') && (
+                <div className="bg-orange-50 border border-orange-200 rounded-lg p-3">
+                  <div className="flex items-center gap-2 text-orange-800">
+                    <AlertCircle className="w-4 h-4" />
+                    <span className="text-sm font-medium">
+                      {booking.bookingStatus === 'tentative' 
+                        ? 'This booking is tentative. Please complete payment to confirm your booking.'
+                        : `Payment pending - Please pay ${booking.paymentMethod === 'cash' ? 'cash at the turf' : 'online'}`
+                      }
+                    </span>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <Separator />
+
+            {/* Actions */}
+            <div className="flex gap-2 flex-wrap">
+              <Button 
+                variant="outline" 
+                onClick={() => downloadReceipt(booking)}
+                className="flex-1 min-w-0"
+                disabled={isProcessing}
+              >
+                <Receipt className="w-4 h-4 mr-2" />
+                Download Receipt
+              </Button>
+              
+              {canPayLater && validateRazorpayConfig() && (
+                <Button 
+                  variant="default"
+                  onClick={() => handlePayLater(booking)}
+                  disabled={isProcessing}
+                  className="flex-1 min-w-0"
+                >
+                  {isProcessing ? (
+                    <>Processing...</>
+                  ) : (
+                    <>
+                      <CreditCard className="w-4 h-4 mr-2" />
+                      Pay Online Now
+                    </>
+                  )}
+                </Button>
+              )}
+              
+              {canPayNow && validateRazorpayConfig() && (
+                <Button 
+                  variant="default"
+                  onClick={() => handlePayNow(booking)}
+                  disabled={isProcessing}
+                  className="flex-1 min-w-0"
+                >
+                  {isProcessing ? (
+                    <>Processing...</>
+                  ) : (
+                    <>
+                      <CreditCard className="w-4 h-4 mr-2" />
+                      Complete Payment
+                    </>
+                  )}
+                </Button>
+              )}
+              
+              {showCancelButton && (
+                <Button 
+                  variant="destructive"
+                  onClick={() => setCancellationDialog({ open: true, booking })}
+                  disabled={isProcessing}
+                  className="flex-1 min-w-0"
+                >
+                  <XCircle className="w-4 h-4 mr-2" />
+                  Cancel Booking
+                </Button>
+              )}
+            </div>
+
+            {/* Booking ID */}
+            <div className="text-xs text-muted-foreground">
+              Booking ID: <span className="font-mono">{booking.id}</span>
+            </div>
           </div>
-        </div>
-      </CardContent>
-    </Card>
-  );
+        </CardContent>
+      </Card>
+    );
+  };
 
   return (
     <main className="container py-8 max-w-4xl mx-auto">
@@ -463,6 +821,17 @@ export default function UserBookingsPage() {
             )}
           </TabsContent>
         </Tabs>
+      )}
+
+      {/* Cancellation Dialog */}
+      {cancellationDialog.booking && (
+        <CancellationDialog
+          open={cancellationDialog.open}
+          onOpenChange={(open) => setCancellationDialog({ open, booking: null })}
+          booking={cancellationDialog.booking}
+          onCancel={handleCancelBooking}
+          isProcessing={processingActions.has(cancellationDialog.booking.id)}
+        />
       )}
     </main>
   );

@@ -7,7 +7,11 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
 import { useEffect, useState } from "react";
-import { createBooking } from "@/hooks/useBooking";
+import { createBooking, createBookingWithPayment, verifyPayment } from "@/hooks/useBooking";
+import { PaymentMethodSelector } from "@/components/booking/PaymentMethodSelector";
+import { initiatePayment, validateRazorpayConfig } from "@/lib/razorpay";
+import { toast } from "sonner";
+import type { RazorpayResponse } from "@/types";
 
 const schema = z.object({
   name: z.string().min(2),
@@ -34,7 +38,13 @@ export default function CheckoutPage() {
   const [useRegisteredEmail, setUseRegisteredEmail] = useState(false);
   const [useRegisteredPhone, setUseRegisteredPhone] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const { register, handleSubmit, setValue, formState: { errors } } = useForm<FormData>({ resolver: zodResolver(schema) });
+  const [isPaymentDialogOpen, setIsPaymentDialogOpen] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [bookingData, setBookingData] = useState<FormData | null>(null);
+  
+  const { register, handleSubmit, setValue, getValues, formState: { errors } } = useForm<FormData>({ 
+    resolver: zodResolver(schema) 
+  });
 
   useEffect(() => {
     if (useRegisteredEmail && user) {
@@ -61,11 +71,63 @@ export default function CheckoutPage() {
     );
   }
 
+  // Check if Razorpay is configured
+  const isRazorpayConfigured = validateRazorpayConfig();
+
   async function onSubmit(values: FormData) {
     if (!state) return;
     setErrorMsg(null);
+    setBookingData(values);
+    
+    // If Razorpay is not configured, default to cash payment
+    if (!isRazorpayConfigured) {
+      await handlePaymentMethod('cash', values);
+    } else {
+      setIsPaymentDialogOpen(true);
+    }
+  }
+
+  async function handlePaymentMethod(method: 'cash' | 'online', formData?: FormData) {
+    if (!state) return;
+    const values = formData || bookingData;
+    if (!values) return;
+
+    setIsProcessing(true);
+    setErrorMsg(null);
+
     try {
-      const booking = await createBooking({
+      if (method === 'cash') {
+        // For cash payment, create booking directly
+        const booking = await createBooking({
+          turfId: state.turfId,
+          date: state.date,
+          startTime: state.startTime,
+          endTime: state.endTime,
+          totalAmount: state.total,
+          userName: values.name,
+          userEmail: useRegisteredEmail && user?.email ? user.email : values.email,
+          userPhone: useRegisteredPhone && user?.phone ? user.phone : values.phone,
+          paymentMethod: method,
+        });
+
+        toast.success('Booking confirmed! Please pay cash when you arrive at the turf.');
+        navigate("/profile");
+      } else {
+        // For online payment, create payment order directly (no booking yet)
+        await handleOnlinePayment(values);
+      }
+    } catch (e) {
+      setErrorMsg((e as Error)?.message || "Booking failed. Please try again.");
+    } finally {
+      setIsProcessing(false);
+      setIsPaymentDialogOpen(false);
+    }
+  }
+
+  async function handleOnlinePayment(values: FormData) {
+    try {
+      // Create payment order with booking details (no booking record created yet)
+      const paymentDetails = await createBookingWithPayment({
         turfId: state.turfId,
         date: state.date,
         startTime: state.startTime,
@@ -75,9 +137,32 @@ export default function CheckoutPage() {
         userEmail: useRegisteredEmail && user?.email ? user.email : values.email,
         userPhone: useRegisteredPhone && user?.phone ? user.phone : values.phone,
       });
-      navigate("/profile");
-    } catch (e) {
-      setErrorMsg((e as Error)?.message || "Booking failed. Please try again.");
+
+      // Initiate Razorpay payment
+      await initiatePayment(
+        paymentDetails,
+        async (response: RazorpayResponse) => {
+          // Payment successful, verify on backend and create booking
+          try {
+            const booking = await verifyPayment({
+              // No bookingId needed for new bookings
+              razorpayResponse: response,
+            });
+            toast.success('Payment successful! Your booking is confirmed.');
+            navigate("/bookings");
+          } catch (error) {
+            console.error('Payment verification failed:', error);
+            toast.error('Payment verification failed. Please contact support.');
+          }
+        },
+        (error: Error) => {
+          console.error('Payment failed:', error);
+          toast.error('Payment failed. Please try again.');
+        }
+      );
+    } catch (error) {
+      console.error('Error creating payment order:', error);
+      toast.error('Failed to initiate payment. Please try again.');
     }
   }
 
@@ -145,6 +230,13 @@ export default function CheckoutPage() {
             )}
             {errors.phone && <p className="text-sm text-destructive mt-1">{errors.phone.message}</p>}
           </div>
+          
+          {!isRazorpayConfigured && (
+            <div className="p-3 bg-yellow-50 border border-yellow-200 rounded text-sm text-yellow-800">
+              Online payment is currently unavailable. You can pay cash at the turf.
+            </div>
+          )}
+          
           <div className="mt-4 p-3 bg-muted/30 rounded text-xs text-muted-foreground text-center">
             By proceeding with payment, you agree to our{" "}
             <Button variant="link" className="p-0 h-auto text-xs text-primary" onClick={() => window.open('/terms-conditions', '_blank')}>
@@ -160,9 +252,28 @@ export default function CheckoutPage() {
             </Button>
             .
           </div>
-          <Button type="submit" variant="hero" className="w-full">Pay & Confirm</Button>
+          <Button 
+            type="submit" 
+            variant="hero" 
+            className="w-full"
+            disabled={isProcessing}
+          >
+            {isProcessing ? "Processing..." : isRazorpayConfigured ? "Continue to Payment" : "Confirm Booking (Pay at Turf)"}
+          </Button>
         </form>
       </div>
+
+      {/* Payment Method Selector Dialog */}
+      <PaymentMethodSelector
+        open={isPaymentDialogOpen}
+        onOpenChange={setIsPaymentDialogOpen}
+        turfName={state.turfName}
+        amount={state.total}
+        date={state.date}
+        time={`${state.startTime} - ${state.endTime}`}
+        onPaymentMethodSelect={handlePaymentMethod}
+        isProcessing={isProcessing}
+      />
     </main>
   );
 }
