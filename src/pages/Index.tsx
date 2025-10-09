@@ -106,8 +106,10 @@ const Index = () => {
       if (selectedLocation) {
         url += `?lat=${selectedLocation.lat}&lon=${selectedLocation.lon}&radius=10`;
       }
+      console.log('[Index] Fetching turfs from:', url);
       try {
         const data = await apiRequest<{ turfs: any[] }>(url);
+        console.log('[Index] Received turf data:', data);
         const mapped: Turf[] = (data.turfs || []).map((t) => ({
           id: t._id ?? t.id,
           name: t.name,
@@ -118,8 +120,10 @@ const Index = () => {
           operatingHours: { open: t.operatingHours?.open ?? "06:00", close: t.operatingHours?.close ?? "22:00" },
           amenities: Array.isArray(t.amenities) ? t.amenities : [],
         }));
+        console.log('[Index] Mapped turfs:', mapped);
         setTurfs(mapped);
-      } catch {
+      } catch (error) {
+        console.error('[Index] Error fetching turfs:', error);
         setTurfs([]);
       } finally {
         setLoading(false);
