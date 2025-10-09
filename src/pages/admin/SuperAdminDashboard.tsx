@@ -18,18 +18,10 @@ import {
   Shield, 
   Download,
   Search,
-  Filter,
   RefreshCw,
-  Activity
+  Send,
+  DollarSign
 } from 'lucide-react';
-
-interface ActivityLog {
-  id: string;
-  type: string;
-  message: string;
-  details: Record<string, unknown>;
-  createdAt: string;
-}
 
 interface SuperAdminStats {
   totalBookings: number;
@@ -44,7 +36,6 @@ interface SuperAdminStats {
 
 interface SuperAdminOverview {
   stats: SuperAdminStats;
-  recentActivity: string[];
 }
 
 interface Booking {
@@ -88,6 +79,20 @@ interface Turf {
   createdAt: string;
 }
 
+interface FundTransfer {
+  id: string;
+  turfOwnerId: string;
+  turfOwnerName: string;
+  turfOwnerEmail: string;
+  totalEarnings: number;
+  platformFee: number;
+  netAmount: number;
+  weekStart: string;
+  weekEnd: string;
+  status: 'pending' | 'transferred' | 'failed';
+  transferDate?: string;
+}
+
 interface User {
   id: string;
   name: string;
@@ -109,13 +114,17 @@ export default function SuperAdminDashboard() {
   const [payments, setPayments] = useState<Payment[]>([]);
   const [turfs, setTurfs] = useState<Turf[]>([]);
   const [users, setUsers] = useState<User[]>([]);
-  const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([]);
+  const [fundTransfers, setFundTransfers] = useState<FundTransfer[]>([]);
 
   // Filters and search
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [dateFilter, setDateFilter] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
+  
+  // Fund transfer date range
+  const [customStartDate, setCustomStartDate] = useState('');
+  const [customEndDate, setCustomEndDate] = useState('');
 
   // Security check - Ensure user is superadmin
   useEffect(() => {
@@ -222,19 +231,63 @@ export default function SuperAdminDashboard() {
     }
   }, [searchTerm, roleFilter]);
 
-  const loadActivityLogs = useCallback(async () => {
+  const loadPendingTransfers = useCallback(async () => {
     try {
-      const data = await apiRequest<{ activities: ActivityLog[] }>('/api/superadmin/activity-logs');
-      setActivityLogs(data.activities || []);
-    } catch (error) {
-      console.error('Error loading activity logs:', error);
+      const data = await apiRequest<{ transfers: any[], message?: string, debug?: any }>('/api/superadmin/pending-transfers');
+      setFundTransfers(data.transfers || []);
+      
+      // Show debug info if available
+      if (data.debug) {
+        console.log('Debug info:', data.debug);
+        toast({
+          title: "Debug Info",
+          description: `Found ${data.debug.totalBookings} total bookings, ${data.debug.paidBookings} paid bookings, ${data.debug.ownersWithTransfers} owners with transfers`,
+        });
+      }
+      
+      if (data.message) {
+        toast({
+          title: "Info",
+          description: data.message,
+        });
+      }
+    } catch (error: any) {
+      console.error('Error loading pending transfers:', error);
+      const errorMessage = error?.response?.data?.message || error?.message || "Failed to load pending transfers.";
       toast({
         title: "Error",
-        description: "Failed to load activity logs.",
+        description: errorMessage,
         variant: "destructive",
       });
     }
   }, []);
+
+  const markOwnerAsPaid = async (ownerId: string, amount: number) => {
+    try {
+      setLoading(true);
+      await apiRequest('/api/superadmin/mark-owner-paid', {
+        method: 'POST',
+        body: JSON.stringify({ ownerId, amount })
+      });
+      
+      // Reload transfers to show updated status
+      await loadPendingTransfers();
+      
+      toast({
+        title: "Success",
+        description: "Owner marked as paid successfully.",
+      });
+    } catch (error: any) {
+      console.error('Error marking owner as paid:', error);
+      toast({
+        title: "Error",
+        description: "Failed to mark owner as paid.",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const exportData = async (type: string) => {
     try {
@@ -290,11 +343,11 @@ export default function SuperAdminDashboard() {
       case 'users':
         loadUsers();
         break;
-      case 'activity':
-        loadActivityLogs();
+      case 'fund-transfers':
+        loadPendingTransfers();
         break;
     }
-  }, [activeTab, searchTerm, statusFilter, dateFilter, roleFilter, user, loadBookings, loadPayments, loadTurfs, loadUsers, loadActivityLogs]);
+  }, [activeTab, searchTerm, statusFilter, dateFilter, roleFilter, user, loadBookings, loadPayments, loadTurfs, loadUsers, loadPendingTransfers]);
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-IN', {
@@ -352,7 +405,7 @@ export default function SuperAdminDashboard() {
           <TabsTrigger value="payments">Payments</TabsTrigger>
           <TabsTrigger value="turfs">Turfs</TabsTrigger>
           <TabsTrigger value="users">Users</TabsTrigger>
-          <TabsTrigger value="activity">Activity</TabsTrigger>
+          <TabsTrigger value="fund-transfers">Fund Transfers</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="space-y-6">
@@ -411,22 +464,6 @@ export default function SuperAdminDashboard() {
                   </CardContent>
                 </Card>
               </div>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle>Recent Platform Activity</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <ul className="space-y-2">
-                    {overview.recentActivity.map((activity, index) => (
-                      <li key={index} className="flex items-center gap-2">
-                        <div className="w-2 h-2 bg-green-500 rounded-full" />
-                        <span className="text-sm">{activity}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </CardContent>
-              </Card>
             </>
           )}
         </TabsContent>
@@ -684,38 +721,79 @@ export default function SuperAdminDashboard() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="activity" className="space-y-6">
+        <TabsContent value="fund-transfers" className="space-y-6">
+          <div className="flex flex-col sm:flex-row gap-4 items-center justify-between">
+            <div className="flex-1">
+              <h2 className="text-2xl font-bold flex items-center gap-2">
+                <DollarSign className="h-6 w-6 text-green-600" />
+                Fund Transfers
+              </h2>
+              <p className="text-gray-600">View and manage payments to turf owners</p>
+            </div>
+            <Button 
+              onClick={loadPendingTransfers} 
+              disabled={loading}
+              variant="outline"
+            >
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Refresh
+            </Button>
+          </div>
+
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Activity className="h-5 w-5" />
-                Super Admin Activity Logs
-              </CardTitle>
-              <CardDescription>Your recent dashboard activities</CardDescription>
+              <CardTitle>Pending Payments to Turf Owners</CardTitle>
+              <CardDescription>
+                All paid bookings that need to be paid to turf owners
+              </CardDescription>
             </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {activityLogs.map((log, index) => (
-                  <div key={index} className="flex items-start gap-3 p-3 border rounded-lg">
-                    <div className="w-2 h-2 bg-blue-500 rounded-full mt-2" />
-                    <div className="flex-1">
-                      <div className="font-medium">{log.message}</div>
-                      <div className="text-sm text-gray-500">{formatDateTime(log.createdAt)}</div>
-                      {log.details && Object.keys(log.details).length > 0 && (
-                        <div className="text-xs text-gray-400 mt-1">
-                          {JSON.stringify(log.details)}
+            <CardContent className="p-0">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Turf Owner</TableHead>
+                    <TableHead>Total Earnings</TableHead>
+                    <TableHead>Platform Fee (10%)</TableHead>
+                    <TableHead>Net Amount to Pay</TableHead>
+                    <TableHead>Bookings Count</TableHead>
+                    <TableHead>Action</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {fundTransfers.map((transfer, index) => (
+                    <TableRow key={transfer.turfOwnerId || index}>
+                      <TableCell>
+                        <div>
+                          <div className="font-medium">{transfer.turfOwnerName}</div>
+                          <div className="text-sm text-gray-500">{transfer.turfOwnerEmail}</div>
                         </div>
-                      )}
-                    </div>
-                  </div>
-                ))}
-                {activityLogs.length === 0 && (
-                  <p className="text-center text-gray-500 py-8">No activity logs available</p>
-                )}
-              </div>
+                      </TableCell>
+                      <TableCell>{formatCurrency(transfer.totalEarnings)}</TableCell>
+                      <TableCell>{formatCurrency(transfer.platformFee)}</TableCell>
+                      <TableCell className="font-semibold text-green-600">
+                        {formatCurrency(transfer.netAmount)}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="outline">{transfer.bookings?.length || 0} bookings</Badge>
+                      </TableCell>
+                      <TableCell>
+                        <Button
+                          size="sm"
+                          onClick={() => markOwnerAsPaid(transfer.turfOwnerId, transfer.netAmount)}
+                          disabled={loading}
+                          className="bg-green-600 hover:bg-green-700"
+                        >
+                          Mark as Paid
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
             </CardContent>
           </Card>
         </TabsContent>
+
       </Tabs>
     </div>
   );

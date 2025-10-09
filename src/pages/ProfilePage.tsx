@@ -1,7 +1,7 @@
 import { Helmet } from "react-helmet-async";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
-import axios from "axios";
+import { apiRequest } from "@/lib/auth";
 import { useState, useRef, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -76,23 +76,18 @@ export default function ProfilePage() {
     }
     setPasswordLoading(true);
     try {
-      const res = await axios.post(
-        process.env.REACT_APP_API_URL ? `${process.env.REACT_APP_API_URL}/api/auth/change-password` : '/api/auth/change-password',
-        {
+      await apiRequest('/api/auth/change-password', {
+        method: 'POST',
+        body: JSON.stringify({
           currentPassword: passwordForm.currentPassword,
           newPassword: passwordForm.newPassword
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${token}`
-          }
-        }
-      );
+        })
+      });
       setPasswordSuccess('Password changed successfully!');
       setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
       setTimeout(() => setShowChangePassword(false), 1200);
     } catch (err) {
-      const msg = err?.response?.data?.message || 'Failed to change password.';
+      const msg = (err as Error).message || 'Failed to change password.';
       setPasswordError(msg);
     } finally {
       setPasswordLoading(false);
