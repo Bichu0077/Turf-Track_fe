@@ -3,7 +3,7 @@ export interface AuthUser {
   name: string;
   email: string;
   phone?: string;
-  role: 'user' | 'admin';
+  role: 'user' | 'admin' | 'superadmin';
   location?: string;
   company?: string;
   createdAt?: string;

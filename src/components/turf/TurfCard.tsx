@@ -6,19 +6,22 @@ import { Link } from "react-router-dom";
 interface Props { turf: Turf }
 
 export default function TurfCard({ turf }: Props) {
+  // Location is now always a string from backend
+  const locationText = turf.location || 'Location not specified';
+
   return (
     <Card className="card-elevated overflow-hidden group">
       <div className="relative aspect-[4/3] overflow-hidden">
         <img
           src={turf.images[0]}
-          alt={`${turf.name} sports turf in ${turf.location.address}`}
+          alt={`${turf.name} sports turf in ${locationText}`}
           loading="lazy"
           className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.03]"
         />
       </div>
       <CardHeader>
         <CardTitle className="text-lg">{turf.name}</CardTitle>
-        <div className="text-sm text-muted-foreground">{turf.location.address}</div>
+        <div className="text-sm text-muted-foreground">{locationText}</div>
       </CardHeader>
       <CardContent>
         <p className="line-clamp-2 text-sm text-muted-foreground">{turf.description}</p>
