@@ -19,6 +19,7 @@ import ResetPasswordPage from "./pages/ResetPasswordPage";
 import ProfilePage from "./pages/ProfilePage";
 import UserBookingsPage from "./pages/UserBookingsPage";
 import AdminDashboard from "./pages/admin/AdminDashboard";
+import SuperAdminDashboard from "./pages/admin/SuperAdminDashboard";
 import TurfManagementPage from "./pages/admin/TurfManagementPage";
 import BookingManagementPage from "./pages/admin/BookingManagementPage";
 import CheckoutPage from "./pages/CheckoutPage";
@@ -27,65 +28,77 @@ import TermsConditionsPage from "./pages/TermsConditionsPage";
 import CancellationRefundsPage from "./pages/CancellationRefundsPage";
 import { AuthProvider } from "@/hooks/useAuth";
 import ProtectedRoute from "@/components/ProtectedRoute";
+import SuperAdminRedirect from "@/components/SuperAdminRedirect";
+import ErrorBoundary from "@/components/ErrorBoundary";
 
 const queryClient = new QueryClient();
 
 const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <HelmetProvider>
-      <TooltipProvider>
-        <Helmet>
-          <title>Turf Management System (TMS)</title>
-          <meta name="description" content="Book sports turfs by the hour. Smart scheduling, secure payments, and admin dashboard." />
-          <link rel="canonical" href="/" />
-        </Helmet>
-        <Toaster />
-        <Sonner />
-        <BrowserRouter>
-          <AuthProvider>
-            <Navbar />
-            <Routes>
-              <Route path="/" element={<Index />} />
-              <Route path="/turfs/:id" element={<TurfDetailPage />} />
-              <Route path="/login" element={<LoginPage />} />
-              <Route path="/register" element={<RegisterPage />} />
-              <Route path="/verify-otp" element={<OtpVerifyPage />} />
-              <Route path="/forgot-password" element={<ForgotPasswordPage />} />
-              <Route path="/forgot-password/verify" element={<ForgotPasswordOtpPage />} />
-              <Route path="/reset-password" element={<ResetPasswordPage />} />
+  <ErrorBoundary>
+    <QueryClientProvider client={queryClient}>
+      <HelmetProvider>
+        <TooltipProvider>
+          <Helmet>
+            <title>Turf Management System (TMS)</title>
+            <meta name="description" content="Book sports turfs by the hour. Smart scheduling, secure payments, and admin dashboard." />
+            <link rel="canonical" href="/" />
+          </Helmet>
+          <Toaster />
+          <Sonner />
+          <BrowserRouter>
+            <AuthProvider>
+              <SuperAdminRedirect />
+              <Navbar />
+              <ErrorBoundary>
+                <Routes>
+                  <Route path="/" element={<Index />} />
+                  <Route path="/turfs/:id" element={<TurfDetailPage />} />
+                  <Route path="/login" element={<LoginPage />} />
+                  <Route path="/register" element={<RegisterPage />} />
+                  <Route path="/verify-otp" element={<OtpVerifyPage />} />
+                  <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+                  <Route path="/forgot-password/verify" element={<ForgotPasswordOtpPage />} />
+                  <Route path="/reset-password" element={<ResetPasswordPage />} />
 
-              {/* Protected booking routes */}
-              <Route element={<ProtectedRoute roles={["user", "admin"]} />}>
-                <Route path="/booking" element={<BookingPage />} />
-                <Route path="/checkout" element={<CheckoutPage />} />
-              </Route>
-              
-              {/* Policy Pages */}
-              <Route path="/shipping-policy" element={<ShippingPolicyPage />} />
-              <Route path="/terms-conditions" element={<TermsConditionsPage />} />
-              <Route path="/cancellation-refunds" element={<CancellationRefundsPage />} />
+                  {/* Protected booking routes */}
+                  <Route element={<ProtectedRoute roles={["user", "admin", "superadmin"]} />}>
+                    <Route path="/booking" element={<BookingPage />} />
+                    <Route path="/checkout" element={<CheckoutPage />} />
+                  </Route>
+                  
+                  {/* Policy Pages */}
+                  <Route path="/shipping-policy" element={<ShippingPolicyPage />} />
+                  <Route path="/terms-conditions" element={<TermsConditionsPage />} />
+                  <Route path="/cancellation-refunds" element={<CancellationRefundsPage />} />
 
-              <Route element={<ProtectedRoute roles={["user", "admin"]} />}>
-                <Route path="/profile" element={<ProfilePage />} />
-                <Route path="/bookings" element={<UserBookingsPage />} />
-              </Route>
+                  <Route element={<ProtectedRoute roles={["user", "admin", "superadmin"]} />}>
+                    <Route path="/profile" element={<ProfilePage />} />
+                    <Route path="/bookings" element={<UserBookingsPage />} />
+                  </Route>
 
-              {/* Admin */}
-              <Route element={<ProtectedRoute roles={["admin"]} />}>
-                <Route path="/admin" element={<AdminDashboard />} />
-                <Route path="/admin/turfs" element={<TurfManagementPage />} />
-                <Route path="/admin/bookings" element={<BookingManagementPage />} />
-              </Route>
+                  {/* Super Admin */}
+                  <Route element={<ProtectedRoute roles={["superadmin"]} />}>
+                    <Route path="/superadmin" element={<SuperAdminDashboard />} />
+                  </Route>
 
-              {/* Catch-all */}
-              <Route path="*" element={<NotFound />} />
-            </Routes>
-            <Footer />
-          </AuthProvider>
-        </BrowserRouter>
-      </TooltipProvider>
-    </HelmetProvider>
-  </QueryClientProvider>
+                  {/* Admin */}
+                  <Route element={<ProtectedRoute roles={["admin", "superadmin"]} />}>
+                    <Route path="/admin" element={<AdminDashboard />} />
+                    <Route path="/admin/turfs" element={<TurfManagementPage />} />
+                    <Route path="/admin/bookings" element={<BookingManagementPage />} />
+                  </Route>
+
+                  {/* Catch-all */}
+                  <Route path="*" element={<NotFound />} />
+                </Routes>
+              </ErrorBoundary>
+              <Footer />
+            </AuthProvider>
+          </BrowserRouter>
+        </TooltipProvider>
+      </HelmetProvider>
+    </QueryClientProvider>
+  </ErrorBoundary>
 );
 
 export default App;

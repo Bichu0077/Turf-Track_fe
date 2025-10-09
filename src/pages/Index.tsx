@@ -1,4 +1,3 @@
-// ...existing code...
 import { Helmet } from "react-helmet-async";
 import { Input } from "@/components/ui/input";
 import { Slider } from "@/components/ui/slider";
@@ -130,12 +129,8 @@ const Index = () => {
 
   const filtered = useMemo(() => {
     return turfs.filter((t) => {
-      let locationText = "";
-      if (t.location && typeof t.location === "object" && t.location !== null && (t.location as any).address) {
-        locationText = (t.location as any).address;
-      } else if (t.location) {
-        locationText = String(t.location);
-      }
+      // Location is now always a string from backend
+      const locationText = t.location || "";
       
       const matchQ = `${t.name} ${locationText} ${t.amenities.join(" ")}` // <-- use backticks here
   .toLowerCase()
