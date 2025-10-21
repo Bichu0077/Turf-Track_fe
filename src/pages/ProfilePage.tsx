@@ -30,6 +30,35 @@ import {
   Building
 } from "lucide-react";
 
+// Helper function to format field names for display
+const formatFieldName = (field: string): string => {
+  const fieldMap: { [key: string]: string } = {
+    'name': 'Full Name',
+    'email': 'Email Address',
+    'phone': 'Phone Number',
+    'location': 'Location',
+    'company': 'Company',
+    'avatar': 'Profile Picture',
+    'profile_pic': 'Profile Picture'
+  };
+  
+  return fieldMap[field] || field.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+};
+
+// Helper function to get field icon
+const getFieldIcon = (field: string) => {
+  const iconMap: { [key: string]: any } = {
+    'name': User,
+    'email': Mail,
+    'phone': Phone,
+    'location': MapPin,
+    'company': Building,
+    'avatar': Camera,
+    'profile_pic': Camera
+  };
+  
+  return iconMap[field] || User;
+};
 
 export default function ProfilePage() {
   const { user, token, logout, refreshMe } = useAuth();
@@ -860,12 +889,20 @@ export default function ProfilePage() {
       </main>
       {/* Activity Modal */}
       <Dialog open={showActivity} onOpenChange={setShowActivity}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Recent Activity</DialogTitle>
+        <DialogContent className="max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+          <DialogHeader className="flex-shrink-0">
+            <DialogTitle className="flex items-center space-x-2">
+              <Activity className="h-5 w-5 text-blue-600" />
+              <span>Recent Activity</span>
+            </DialogTitle>
           </DialogHeader>
-          <div className="space-y-3 max-h-[60vh] overflow-auto">
-            {activityLoading && <div className="text-sm text-gray-600">Loading activity...</div>}
+          <div className="flex-1 space-y-4 overflow-auto pr-2" style={{scrollbarWidth: 'thin'}}>
+            {activityLoading && (
+              <div className="flex items-center justify-center py-8">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                <span className="ml-3 text-sm text-gray-600">Loading activity...</span>
+              </div>
+            )}
             {activityError && (
               <Alert className="border-red-200 bg-red-50">
                 <AlertCircle className="h-4 w-4 text-red-600" />
@@ -873,37 +910,112 @@ export default function ProfilePage() {
               </Alert>
             )}
             {!activityLoading && !activityError && activities.length === 0 && (
-              <div className="text-sm text-gray-600">No recent activity.</div>
+              <div className="text-center py-12">
+                <Activity className="mx-auto h-12 w-12 text-gray-400" />
+                <div className="mt-4 text-sm font-medium text-gray-900">No recent activity</div>
+                <div className="mt-2 text-sm text-gray-600">
+                  Your profile changes and account updates will appear here.
+                </div>
+              </div>
             )}
             {!activityLoading && activities.map((a) => (
-              <div key={a.id} className="p-3 border border-gray-200 rounded-lg">
-                <div className="flex items-center justify-between">
-                  <div className="text-sm font-medium text-gray-900">{a.message}</div>
-                  <div className="text-xs text-gray-500">{new Date(a.createdAt).toLocaleString()}</div>
+              <div key={a.id} className="border border-gray-200 rounded-xl bg-white shadow-sm hover:shadow-md transition-all duration-200">
+                <div className="px-4 py-3 border-b border-gray-100 bg-gray-50/50 rounded-t-xl">
+                  <div className="flex items-start justify-between">
+                    <div className="flex items-center space-x-3">
+                      <div className={`p-1.5 rounded-full flex-shrink-0 ${
+                        a.type === 'profile_update' ? 'bg-blue-100' : 
+                        a.type === 'email_update' ? 'bg-green-100' : 
+                        a.type === 'password_change' ? 'bg-orange-100' : 'bg-gray-100'
+                      }`}>
+                        {a.type === 'profile_update' && <Edit2 className="h-3 w-3 text-blue-600" />}
+                        {a.type === 'email_update' && <Mail className="h-3 w-3 text-green-600" />}
+                        {a.type === 'password_change' && <Lock className="h-3 w-3 text-orange-600" />}
+                      </div>
+                      <div className="text-sm font-semibold text-gray-900">{a.message}</div>
+                    </div>
+                    <div className="text-xs text-gray-500 flex-shrink-0 ml-4 bg-white px-2 py-1 rounded-full">
+                      {new Date(a.createdAt).toLocaleString()}
+                    </div>
+                  </div>
                 </div>
+                <div className="p-4">
                 {a.type === 'profile_update' && a.details?.changed && (
-                  <div className="mt-2 text-xs text-gray-700">
+                  <div className="mt-3 space-y-3">
                     {Object.entries(a.details.changed).map(([field, diff]: any) => (
-                      <div key={field} className="grid grid-cols-3 gap-2 py-1">
-                        <div className="text-gray-500">{field}</div>
-                        <div className="truncate" title={String(diff.from ?? '')}>{String(diff.from ?? '')}</div>
-                        <div className="truncate" title={String(diff.to ?? '')}>{String(diff.to ?? '')}</div>
+                      <div key={field} className="bg-gray-50 rounded-lg p-3 space-y-2">
+                      <div className="flex items-center space-x-2 mb-2">
+                        {(() => {
+                          const IconComponent = getFieldIcon(field);
+                          return <IconComponent className="h-4 w-4 text-gray-600" />;
+                        })()}
+                        <div className="text-xs font-semibold text-gray-800">
+                          {formatFieldName(field)}
+                        </div>
+                      </div>
+                        <div className="space-y-2">
+                          <div className="flex items-start space-x-2">
+                            <span className="text-xs font-medium text-red-600 bg-red-100 px-2 py-1 rounded flex-shrink-0">
+                              Before
+                            </span>
+                            <div className="text-xs text-gray-700 bg-white px-3 py-2 rounded border flex-1 min-w-0">
+                              {diff.from ? String(diff.from) : <span className="italic text-gray-400">Empty</span>}
+                            </div>
+                          </div>
+                          <div className="flex items-start space-x-2">
+                            <span className="text-xs font-medium text-green-600 bg-green-100 px-2 py-1 rounded flex-shrink-0">
+                              After
+                            </span>
+                            <div className="text-xs text-gray-700 bg-white px-3 py-2 rounded border flex-1 min-w-0">
+                              {diff.to ? String(diff.to) : <span className="italic text-gray-400">Empty</span>}
+                            </div>
+                          </div>
+                        </div>
                       </div>
                     ))}
                   </div>
                 )}
                 {a.type === 'email_update' && (
-                  <div className="mt-2 text-xs text-gray-700">
-                    <div className="grid grid-cols-3 gap-2 py-1">
-                      <div className="text-gray-500">email</div>
-                      <div className="truncate" title={String(a.details?.from ?? '')}>{String(a.details?.from ?? '')}</div>
-                      <div className="truncate" title={String(a.details?.to ?? '')}>{String(a.details?.to ?? '')}</div>
+                  <div className="mt-3">
+                    <div className="bg-gray-50 rounded-lg p-3 space-y-2">
+                      <div className="flex items-center space-x-2 mb-2">
+                        <Mail className="h-4 w-4 text-gray-600" />
+                        <div className="text-xs font-semibold text-gray-800">
+                          Email Address
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        <div className="flex items-start space-x-2">
+                          <span className="text-xs font-medium text-red-600 bg-red-100 px-2 py-1 rounded flex-shrink-0">
+                            Before
+                          </span>
+                          <div className="text-xs text-gray-700 bg-white px-3 py-2 rounded border flex-1 min-w-0">
+                            {a.details?.from ? String(a.details.from) : <span className="italic text-gray-400">Empty</span>}
+                          </div>
+                        </div>
+                        <div className="flex items-start space-x-2">
+                          <span className="text-xs font-medium text-green-600 bg-green-100 px-2 py-1 rounded flex-shrink-0">
+                            After
+                          </span>
+                          <div className="text-xs text-gray-700 bg-white px-3 py-2 rounded border flex-1 min-w-0">
+                            {a.details?.to ? String(a.details.to) : <span className="italic text-gray-400">Empty</span>}
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 )}
                 {a.type === 'password_change' && (
-                  <div className="mt-2 text-xs text-gray-500">Password updated</div>
+                  <div className="p-4 bg-orange-50 rounded-lg border border-orange-200">
+                    <div className="flex items-center space-x-2">
+                      <Lock className="h-4 w-4 text-orange-600" />
+                      <div className="text-sm text-orange-800 font-medium">
+                        Password was successfully updated for security
+                      </div>
+                    </div>
+                  </div>
                 )}
+                </div>
               </div>
             ))}
           </div>
