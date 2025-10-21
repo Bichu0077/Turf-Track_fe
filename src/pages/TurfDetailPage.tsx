@@ -5,22 +5,32 @@ import { Calendar } from "@/components/ui/calendar";
 import { Button } from "@/components/ui/button";
 import { useEffect, useState } from "react";
 import { format, setHours, setMinutes, isSameDay } from "date-fns";
-import { getTurfAvailability } from "@/hooks/useBooking";
+import { getTurfAvailability, createBooking } from "@/hooks/useBooking";
 import { apiRequest } from "@/lib/auth";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
-import type { Turf } from "@/types";
+import { toast } from "sonner";
+import OwnerBookingForm from "@/components/owner/OwnerBookingForm";
+import { Crown } from "lucide-react";
+import type { Turf, OwnerBookingData } from "@/types";
 
 export default function TurfDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { token } = useAuth();
-  const { toast } = useToast();
+  const { token, user } = useAuth();
+  const { toast: reactToast } = useToast();
   const [turf, setTurf] = useState<Turf | null>(null);
   const [loading, setLoading] = useState(true);
   const [date, setDate] = useState<Date | undefined>(new Date());
   const [selectedSlots, setSelectedSlots] = useState<string[]>([]);
   const [bookedTimes, setBookedTimes] = useState<string[]>([]);
+  const [showOwnerBooking, setShowOwnerBooking] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
+
+  // Clear selected slots when date changes
+  useEffect(() => {
+    setSelectedSlots([]);
+  }, [date]);
 
   useEffect(() => {
     (async () => {
@@ -56,6 +66,8 @@ export default function TurfDetailPage() {
             close: String(((t.operatingHours as Record<string, unknown>)?.close) || "22:00") 
           },
           amenities: Array.isArray(t.amenities) ? t.amenities as string[] : [],
+          owner: String(t.owner || ""),
+
         };
         console.log("Mapped turf data:", mapped);
         setTurf(mapped);
@@ -71,11 +83,17 @@ export default function TurfDetailPage() {
   // Fetch unavailable slots when turf and date are selected
   useEffect(() => {
     async function fetchBookedTimes() {
-      if (!turf || !date) return;
+      if (!turf || !date) {
+        setBookedTimes([]);
+        return;
+      }
       try {
+        console.log('Fetching availability for:', turf.id, format(date, 'yyyy-MM-dd'));
         const booked = await getTurfAvailability(turf.id, format(date, 'yyyy-MM-dd'));
+        console.log('Booked times:', booked);
         setBookedTimes(booked);
-      } catch {
+      } catch (error) {
+        console.error('Error fetching booked times:', error);
         setBookedTimes([]);
       }
     }
@@ -108,30 +126,68 @@ export default function TurfDetailPage() {
     );
   }
 
-  // Only calculate these after turf is loaded
-  const openHour = turf.operatingHours.open ? parseInt(turf.operatingHours.open.split(":")[0]) : 6;
-  const closeHour = turf.operatingHours.close ? parseInt(turf.operatingHours.close.split(":")[0]) : 22;
-  const hours = Array.from({length: closeHour - openHour}, (_, i) => `${(openHour + i).toString().padStart(2, '0')}:00`);
-
   // Multi-slot selection logic
   let startTime = "";
   let endTime = "";
   let duration = 0;
-  if (selectedSlots.length === 1) {
-    startTime = selectedSlots[0];
-    const s = parseInt(startTime);
-    duration = 1;
-    endTime = (s + 1).toString().padStart(2, '0') + ":00";
-  } else if (selectedSlots.length > 1) {
-    // Find the earliest and latest slot
-    const slotIdxs = selectedSlots.map(s => hours.indexOf(s)).sort((a, b) => a - b);
-    const s = slotIdxs[0];
-    const e = slotIdxs[selectedSlots.length - 1];
-    startTime = hours[s];
-    endTime = hours[e + 1] || ((parseInt(hours[e]) + 1).toString().padStart(2, '0') + ":00");
-    duration = e - s + 1;
+  
+  if (selectedSlots.length > 0) {
+    // Sort selected slots to get proper start and end times
+    const sortedSlots = [...selectedSlots].sort((a, b) => {
+      const aMinutes = parseInt(a.split(':')[0]) * 60 + parseInt(a.split(':')[1]);
+      const bMinutes = parseInt(b.split(':')[0]) * 60 + parseInt(b.split(':')[1]);
+      return aMinutes - bMinutes;
+    });
+    
+    startTime = sortedSlots[0];
+    duration = sortedSlots.length;
+    
+    // Calculate end time by adding duration hours to start time
+    const startHour = parseInt(startTime.split(':')[0]);
+    const startMinute = parseInt(startTime.split(':')[1]);
+    const endHour = startHour + duration;
+    const endMinute = startMinute;
+    
+    if (endHour >= 24) {
+      endTime = `${(endHour - 24).toString().padStart(2, '0')}:${endMinute.toString().padStart(2, '0')}`;
+    } else {
+      endTime = `${endHour.toString().padStart(2, '0')}:${endMinute.toString().padStart(2, '0')}`;
+    }
   }
+  const isOwner = user && turf && turf.owner === user.id;
   const total = duration > 0 ? turf.pricePerHour * duration : 0;
+
+  // Owner booking handler
+  const handleOwnerBooking = async (data: OwnerBookingData) => {
+    if (!turf || !date) return;
+    
+    try {
+      setIsProcessing(true);
+      
+      const booking = await createBooking({
+        turfId: turf.id,
+        date: format(date, 'yyyy-MM-dd'),
+        startTime,
+        endTime,
+        totalAmount: 0,
+        userName: data.userName,
+        userEmail: data.userEmail,
+        userPhone: data.userPhone,
+        paymentMethod: 'owner',
+        bookingType: data.bookingType,
+        notes: data.notes
+      });
+
+      toast('Owner booking confirmed successfully! No payment required.');
+      setShowOwnerBooking(false);
+      navigate('/bookings');
+    } catch (error) {
+      toast('Failed to create owner booking');
+      console.error('Owner booking error:', error);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
 
   // Helper to format time as 12-hour with AM/PM
   function format12HourRange(start: string, end: string) {
@@ -179,7 +235,11 @@ export default function TurfDetailPage() {
               <Calendar
                 mode="single"
                 selected={date}
-                onSelect={setDate}
+                onSelect={(newDate) => {
+                  setDate(newDate);
+                  setSelectedSlots([]); // Clear slots when date changes
+                }}
+                disabled={(date) => date < new Date(new Date().setHours(0, 0, 0, 0))}
                 className="rounded-md border"
               />
             </div>
@@ -188,49 +248,92 @@ export default function TurfDetailPage() {
               <TimeSlotPicker
                 operatingHours={turf.operatingHours}
                 bookedTimes={bookedTimes}
-                selectedDate={date}
+                selectedDate={date || new Date()}
                 onSelect={slots => setSelectedSlots(Array.isArray(slots) ? slots : [slots])}
               />
               {duration > 0 && (
-                <div className="mt-2 text-primary font-semibold">Total: ₹{total}</div>
+                <div className="mt-2 text-primary font-semibold">
+                  Total: {isOwner ? 'Free (Owner)' : `₹${total}`}
+                </div>
               )}
             </div>
           </div>
 
           <div className="flex items-center justify-between">
-            <div className="text-lg font-semibold">₹{turf.pricePerHour} / hr</div>
-            <Button
-              variant="hero"
-              disabled={!date || !(startTime && endTime && duration > 0)}
-              onClick={() => {
-                if (!token) {
-                  toast({
-                    title: 'Login Required',
-                    description: 'You must be logged in to make a booking.',
-                    variant: 'destructive'
+            <div className="text-lg font-semibold flex items-center gap-2">
+              {isOwner && <Crown className="h-5 w-5 text-yellow-500" />}
+              {isOwner ? 'Free for Owner' : `₹${turf.pricePerHour} / hr`}
+            </div>
+            
+            {isOwner ? (
+              <Button
+                variant="hero"
+                disabled={!date || !(startTime && endTime && duration > 0)}
+                onClick={() => {
+                  if (!token) {
+                    reactToast({
+                      title: 'Login Required',
+                      description: 'You must be logged in to make a booking.',
+                      variant: 'destructive'
+                    });
+                    navigate('/login');
+                    return;
+                  }
+                  setShowOwnerBooking(true);
+                }}
+                className="bg-green-600 hover:bg-green-700"
+              >
+                <Crown className="h-4 w-4 mr-2" />
+                Book Slot (Free)
+              </Button>
+            ) : (
+              <Button
+                variant="hero"
+                disabled={!date || !(startTime && endTime && duration > 0)}
+                onClick={() => {
+                  if (!token) {
+                    reactToast({
+                      title: 'Login Required',
+                      description: 'You must be logged in to make a booking.',
+                      variant: 'destructive'
+                    });
+                    navigate('/login');
+                    return;
+                  }
+                  
+                  navigate("/checkout", {
+                    state: {
+                      turfId: turf.id,
+                      turfName: turf.name,
+                      pricePerHour: turf.pricePerHour,
+                      date: date ? format(date, 'yyyy-MM-dd') : null,
+                      startTime,
+                      endTime,
+                      total,
+                    },
                   });
-                  navigate('/login');
-                  return;
-                }
-                
-                navigate("/checkout", {
-                  state: {
-                    turfId: turf.id,
-                    turfName: turf.name,
-                    pricePerHour: turf.pricePerHour,
-                    date: date ? format(date, 'yyyy-MM-dd') : null,
-                    startTime,
-                    endTime,
-                    total,
-                  },
-                });
-              }}
-            >
-              Proceed to Checkout
-            </Button>
+                }}
+              >
+                Proceed to Checkout
+              </Button>
+            )}
           </div>
         </div>
       </div>
+
+      {/* Owner Booking Form Modal */}
+      {showOwnerBooking && isOwner && date && (
+        <OwnerBookingForm
+          turfId={turf.id}
+          turfName={turf.name}
+          date={format(date, 'yyyy-MM-dd')}
+          startTime={startTime}
+          endTime={endTime}
+          onSubmit={handleOwnerBooking}
+          onCancel={() => setShowOwnerBooking(false)}
+          isLoading={isProcessing}
+        />
+      )}
     </main>
   );
 }

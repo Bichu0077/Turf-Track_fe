@@ -41,6 +41,8 @@ export default function CheckoutPage() {
   const [isPaymentDialogOpen, setIsPaymentDialogOpen] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [bookingData, setBookingData] = useState<FormData | null>(null);
+
+
   
   const { register, handleSubmit, setValue, getValues, formState: { errors } } = useForm<FormData>({ 
     resolver: zodResolver(schema) 
@@ -174,12 +176,18 @@ export default function CheckoutPage() {
         <link rel="canonical" href="/checkout" />
       </Helmet>
       <div className="max-w-lg mx-auto card-elevated p-6 mt-8">
-        <h2 className="mb-4 text-lg font-semibold">Booking Summary</h2>
+        <h2 className="mb-4 text-lg font-semibold">
+          Booking Summary
+        </h2>
         <div className="grid gap-2 text-sm mb-6">
           <div className="flex justify-between"><span>Turf</span><span>{state.turfName}</span></div>
           <div className="flex justify-between"><span>Date</span><span>{state.date}</span></div>
           <div className="flex justify-between"><span>Time</span><span>{state.startTime} - {state.endTime}</span></div>
-          <div className="mt-2 flex justify-between font-medium"><span>Total</span><span>₹{state.total}</span></div>
+          <div className="mt-2 flex justify-between font-medium">
+            <span>Total</span>
+            <span>₹{state.total}</span>
+          </div>
+
         </div>
         {errorMsg && (
           <div className="mb-4 p-2 bg-red-100 text-red-700 rounded text-sm border border-red-300">
@@ -258,22 +266,25 @@ export default function CheckoutPage() {
             className="w-full"
             disabled={isProcessing}
           >
-            {isProcessing ? "Processing..." : isRazorpayConfigured ? "Continue to Payment" : "Confirm Booking (Pay at Turf)"}
+            {isProcessing ? "Processing..." : 
+             isRazorpayConfigured ? "Continue to Payment" : "Confirm Booking (Pay at Turf)"}
           </Button>
         </form>
       </div>
 
-      {/* Payment Method Selector Dialog */}
-      <PaymentMethodSelector
-        open={isPaymentDialogOpen}
-        onOpenChange={setIsPaymentDialogOpen}
-        turfName={state.turfName}
-        amount={state.total}
-        date={state.date}
-        time={`${state.startTime} - ${state.endTime}`}
-        onPaymentMethodSelect={handlePaymentMethod}
-        isProcessing={isProcessing}
-      />
+      {/* Payment Method Selector Dialog - Hidden for owners */}
+      {(
+        <PaymentMethodSelector
+          open={isPaymentDialogOpen}
+          onOpenChange={setIsPaymentDialogOpen}
+          turfName={state.turfName}
+          amount={state.total}
+          date={state.date}
+          time={`${state.startTime} - ${state.endTime}`}
+          onPaymentMethodSelect={handlePaymentMethod}
+          isProcessing={isProcessing}
+        />
+      )}
     </main>
   );
 }

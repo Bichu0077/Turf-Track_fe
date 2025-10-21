@@ -12,6 +12,7 @@ export interface Turf {
   pricePerHour: number;
   operatingHours: OperatingHours;
   amenities: string[];
+  owner?: string;
 }
 
 export interface Booking {
@@ -26,8 +27,10 @@ export interface Booking {
   endTime: string;   // "15:00"
   totalAmount: number;
   paymentStatus: 'pending' | 'completed' | 'failed' | 'refunded';
-  paymentMethod: 'cash' | 'online' | null;
+  paymentMethod: 'cash' | 'online' | 'owner' | null;
   bookingStatus: 'confirmed' | 'cancelled' | 'tentative';
+  bookingType?: 'customer' | 'owner' | 'maintenance' | 'event';
+  notes?: string;
   razorpayOrderId?: string;
   razorpayPaymentId?: string;
   cancelledAt?: string;
@@ -65,56 +68,12 @@ export interface RazorpayResponse {
   razorpay_signature: string;
 }
 
-export interface FundTransfer {
-  id?: string;
-  turfOwnerId: string;
-  turfOwnerName: string;
-  turfOwnerEmail: string;
-  totalEarnings: number;
-  netAmount: number;
-  weekStart?: string;
-  weekEnd?: string;
-  status?: string;
-  bookings?: {
-    id: string;
-    userName: string;
-    userEmail: string;
-    turfName: string;
-    amount: number;
-    payoutAmount: number;
-    bookingDate: string;
-    startTime: string;
-    endTime: string;
-    createdAt: string;
-    settlementStatus: string;
-  }[];
-}
+export type BookingType = 'customer' | 'owner' | 'maintenance' | 'event';
 
-export interface OwnerSettlement {
-  booking_id: string;
-  turf_id: string;
-  turf_name: string;
-  owner_id: string;
-  owner_name: string;
-  owner_email: string;
-  user_name: string;
-  user_email: string;
-  booking_date: string;
-  start_time: string;
-  end_time: string;
-  total_amount: number;
-  owner_settlement_amount: number;
-  owner_settlement_status: string;
-  booking_created_at: string;
-  days_since_booking: number;
-}
-
-export interface OwnerSettlementSummary {
-  owner_id: string;
-  owner_name: string;
-  owner_email: string;
-  pending_bookings: number;
-  total_pending_amount: number;
-  oldest_pending_booking: string;
-  newest_pending_booking: string;
+export interface OwnerBookingData {
+  bookingType: BookingType;
+  notes: string;
+  userName: string;
+  userEmail: string;
+  userPhone: string;
 }
