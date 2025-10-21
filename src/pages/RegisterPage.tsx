@@ -9,12 +9,18 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/auth";
 
+/**
+ * Registration Page - Security Note:
+ * All user registrations are restricted to 'user' role only.
+ * Admin privileges must be assigned manually via Supabase dashboard.
+ */
+
 const schema = z.object({
   name: z.string().min(2),
   email: z.string().email(),
   phone: z.string().min(8),
   password: z.string().min(6),
-  role: z.enum(["user", "admin"]).default("user"),
+  role: z.enum(["user"]).default("user"),
 });
 
 type FormData = z.infer<typeof schema>;
@@ -155,14 +161,8 @@ export default function RegisterPage() {
             {errors.password && <p className="text-sm text-destructive mt-1">{errors.password.message}</p>}
           </div>
 
-          <div>
-            <label className="mb-1 block text-sm font-medium">Role</label>
-            <select {...register("role")} className="w-full rounded-md border bg-background px-3 py-2 text-sm">
-              <option value="user">User</option>
-              <option value="admin">Admin</option>
-            </select>
-            {errors.role && <p className="text-sm text-destructive mt-1">{errors.role.message as string}</p>}
-          </div>
+          {/* Role is automatically set to "user" - Admin privileges assigned manually via Supabase */}
+          <input {...register("role")} type="hidden" value="user" />
 
           <Button type="submit" variant="hero" className="w-full" disabled={submitting}>
             {submitting ? "Sending OTP..." : "Create account"}

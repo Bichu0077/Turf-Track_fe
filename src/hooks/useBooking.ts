@@ -10,7 +10,9 @@ export async function createBooking(input: {
 	userName: string;
 	userEmail: string;
 	userPhone?: string;
-	paymentMethod: 'cash' | 'online';
+	paymentMethod: 'cash' | 'online' | 'owner';
+	bookingType?: 'customer' | 'owner' | 'maintenance' | 'event';
+	notes?: string;
 }): Promise<Booking> {
 	const res = await apiRequest<{ booking: Booking }>(`/api/bookings`, {
 		method: 'POST',
@@ -24,6 +26,8 @@ export async function createBooking(input: {
 			userEmail: input.userEmail,
 			userPhone: input.userPhone,
 			paymentMethod: input.paymentMethod,
+			bookingType: input.bookingType,
+			notes: input.notes,
 		}),
 	});
 	return res.booking;
