@@ -56,8 +56,8 @@ export default function RegisterPage() {
       try {
         setCheckingEmail(true);
         const q = encodeURIComponent(debouncedEmail.trim());
-        const res = await fetch(`/api/auth/email-available?email=${q}`, { signal: ctrl.signal });
-        const data = await res.json().catch(() => ({}));
+        // Use apiRequest helper so production uses VITE_API_URL (not relative /api which only works with dev proxy)
+  const data = await apiRequest<{ available?: boolean }>(`/api/auth/email-available?email=${q}`, { method: 'GET', signal: ctrl.signal }).catch(() => ({}));
         if (!ignore) setEmailAvailable(Boolean(data?.available));
       } catch {
         if (!ignore) setEmailAvailable(null);
@@ -75,28 +75,19 @@ export default function RegisterPage() {
   async function onSubmit(values: FormData) {
     setSubmitting(true);
     try {
-      const res = await fetch("/api/auth/register/start", {
+      const data = await apiRequest<{ transactionId?: string; email?: string }>("/api/auth/register/start", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(values),
       });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        toast({
-          title: "Registration failed",
-          description: data?.message || "Please try again",
-          variant: "destructive",
-        });
-        return;
-      }
 
       // server should return a transactionId (or similar) — include it in pending storage
-      const pending = { ...values, transactionId: (data && data.transactionId) ? data.transactionId : undefined, email: data?.email ?? values.email };
+      const pending = { ...values, transactionId: data?.transactionId, email: data?.email ?? values.email };
       sessionStorage.setItem("pendingRegistration", JSON.stringify(pending));
       toast({ title: "OTP sent", description: "Check your email for the verification code." });
       navigate("/verify-otp");
-    } catch (err) {
-      toast({ title: "Registration failed", description: "Please try again", variant: "destructive" });
+    } catch (err: unknown) {
+  const msg = err instanceof Error ? err.message : undefined;
+      toast({ title: "Registration failed", description: msg || "Please try again", variant: "destructive" });
     } finally {
       setSubmitting(false);
     }
@@ -164,9 +155,14 @@ export default function RegisterPage() {
           {/* Role is automatically set to "user" - Admin privileges assigned manually via Supabase */}
           <input {...register("role")} type="hidden" value="user" />
 
-          <Button type="submit" variant="hero" className="w-full" disabled={submitting}>
-            {submitting ? "Sending OTP..." : "Create account"}
-          </Button>
+          {(() => {
+            const isSignupDisabled = submitting || !emailFormatOk || emailAvailable === false;
+            return (
+              <Button type="submit" variant="hero" className="w-full" disabled={isSignupDisabled}>
+                {submitting ? "Sending OTP..." : "Create account"}
+              </Button>
+            );
+          })()}
           
 
         </form>
