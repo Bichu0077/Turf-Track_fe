@@ -152,7 +152,7 @@ export default function TimeSlotPicker({ operatingHours, bookedTimes = [], selec
                 }
               }
             }}
-            className={`rounded-md border px-3 py-2 text-xs font-semibold w-full whitespace-nowrap overflow-hidden text-ellipsis flex items-center justify-center transition-all min-h-[2.5rem]
+            className={`rounded-md border px-3 py-2 text-[10px] font-semibold w-full whitespace-nowrap overflow-hidden text-ellipsis flex items-center justify-center transition-all min-h-[2.5rem]
               ${isDisabled
                 ? "cursor-not-allowed bg-gray-100 text-gray-400 border-gray-200"
                 : isSelected
